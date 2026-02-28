@@ -20,32 +20,9 @@ import ErrorState from "../components/common/ErrorState";
 import DataTable from "../components/common/DataTable";
 import { isFeatureEnabled } from "../utils/featureFlags";
 
-const fallbackRevenue = [
-  { month: "Aug", revenue: 24000 },
-  { month: "Sep", revenue: 28000 },
-  { month: "Oct", revenue: 32000 },
-  { month: "Nov", revenue: 36000 },
-  { month: "Dec", revenue: 41000 },
-  { month: "Jan", revenue: 46000 }
-];
+const formatStatValue = (value) => (value === null || value === undefined ? "—" : value);
 
-const fallbackOrders = [
-  { id: "ORD-3902", tenant: "Urban Mart", amount: "₹420", status: "Paid" },
-  { id: "ORD-3901", tenant: "FreshLane", amount: "₹110", status: "Pending" },
-  { id: "ORD-3899", tenant: "Central Grocers", amount: "₹980", status: "Paid" }
-];
-
-const fallbackLogs = [
-  { id: "LOG-9001", message: "Tenant FreshLane upgraded to Growth plan.", level: "info" },
-  { id: "LOG-8998", message: "Failed webhook delivery for tenant Urban Mart.", level: "warning" },
-  { id: "LOG-8991", message: "Admin password reset requested.", level: "info" }
-];
-
-const fallbackPlanRevenue = [
-  { name: "Starter", value: 12000 },
-  { name: "Growth", value: 21000 },
-  { name: "Enterprise", value: 13000 }
-];
+const formatCurrency = (value) => (value === null || value === undefined ? "—" : `₹${value}`);
 
 const DashboardHome = () => {
   const dispatch = useAppDispatch();
@@ -67,18 +44,18 @@ const DashboardHome = () => {
   if (status === "failed") return <ErrorState message={error} />;
 
   const stats = {
-    totalTenants: summary?.totalTenants ?? 128,
-    activeTenants: summary?.activeTenants ?? 103,
-    inactiveTenants: summary?.inactiveTenants ?? 25,
-    expiredTenants: summary?.expiredTenants ?? 14,
-    monthlyRevenue: summary?.monthlyRevenue ?? 46000,
-    paidSubscriptions: subscriptions?.paidCount ?? summary?.paidSubscriptions ?? 112,
-    newTenants: summary?.newTenants ?? 12
+    totalTenants: formatStatValue(summary?.totalTenants),
+    activeTenants: formatStatValue(summary?.activeTenants),
+    inactiveTenants: formatStatValue(summary?.inactiveTenants),
+    expiredTenants: formatStatValue(summary?.expiredTenants),
+    monthlyRevenue: summary?.monthlyRevenue ?? null,
+    paidSubscriptions: formatStatValue(subscriptions?.paidCount ?? summary?.paidSubscriptions),
+    newTenants: formatStatValue(summary?.newTenants)
   };
 
-  const orders = summary?.recentOrders || fallbackOrders;
-  const logs = summary?.systemLogs || fallbackLogs;
-  const planRevenue = summary?.revenueByPlan || fallbackPlanRevenue;
+  const orders = summary?.recentOrders ?? [];
+  const logs = summary?.systemLogs ?? [];
+  const planRevenue = summary?.revenueByPlan ?? [];
   const pieColors = ["#1f5eff", "#22c55e", "#f97316", "#0ea5e9"];
 
   const columns = [
@@ -98,7 +75,7 @@ const DashboardHome = () => {
     }
   ];
 
-  const revenueChartData = Array.isArray(revenueSeries) ? revenueSeries : fallbackRevenue;
+  const revenueChartData = Array.isArray(revenueSeries) ? revenueSeries : [];
 
   return (
     <Box>
@@ -119,7 +96,7 @@ const DashboardHome = () => {
           <StatCard title="Expired Tenants" value={stats.expiredTenants} accent="#ef4444" />
         </Grid>
         <Grid item xs={12} md={4}>
-          <StatCard title="Total Monthly Revenue" value={`₹${stats.monthlyRevenue}`} />
+          <StatCard title="Total Monthly Revenue" value={formatCurrency(stats.monthlyRevenue)} />
         </Grid>
         <Grid item xs={12} md={4}>
           <StatCard title="Total Subscriptions Paid" value={stats.paidSubscriptions} />
@@ -192,7 +169,7 @@ const DashboardHome = () => {
                     </Typography>
                     <Box sx={{ flexGrow: 1 }} />
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      ₹{plan.value}
+                      {formatCurrency(plan.value)}
                     </Typography>
                   </Box>
                 ))}
@@ -206,14 +183,20 @@ const DashboardHome = () => {
               <Typography variant="h6" sx={{ mb: 2 }}>
                 System Logs
               </Typography>
-              {logs.map((log) => (
-                <Box key={log.id} sx={{ mb: 2 }}>
-                  <Typography variant="caption" sx={{ color: "#94a3b8" }}>
-                    {log.id}
-                  </Typography>
-                  <Typography variant="body2">{log.message}</Typography>
-                </Box>
-              ))}
+              {logs.length === 0 ? (
+                <Typography variant="body2" sx={{ color: "#64748b" }}>
+                  No system logs available.
+                </Typography>
+              ) : (
+                logs.map((log) => (
+                  <Box key={log.id} sx={{ mb: 2 }}>
+                    <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+                      {log.id}
+                    </Typography>
+                    <Typography variant="body2">{log.message}</Typography>
+                  </Box>
+                ))
+              )}
             </CardContent>
           </Card>
         </Grid>

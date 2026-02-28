@@ -121,6 +121,8 @@ const initialState = {
   createUserStatus: "idle",
   createUserError: null,
   createdUser: null,
+  createStatus: "idle",
+  createError: null,
   users: [],
   usersStatus: "idle",
   usersError: null,
@@ -394,6 +396,22 @@ const tenantsSlice = createSlice({
       .addCase(saveTenantPlan.rejected, (state, action) => {
         state.saveStatus = "failed";
         state.saveError = action.payload || "Failed to update plan";
+      })
+      .addCase(createNewTenant.pending, (state) => {
+        state.createStatus = "loading";
+        state.createError = null;
+      })
+      .addCase(createNewTenant.fulfilled, (state, action) => {
+        state.createStatus = "succeeded";
+        const tenant = action.payload?.data?.tenant || action.payload?.tenant || action.payload;
+        const normalized = normalizeTenant(tenant);
+        if (normalized) {
+          state.list = [normalized, ...state.list];
+        }
+      })
+      .addCase(createNewTenant.rejected, (state, action) => {
+        state.createStatus = "failed";
+        state.createError = action.payload || "Failed to create tenant";
       })
       .addCase(importTenantProducts.pending, (state) => {
         state.importStatus = "loading";

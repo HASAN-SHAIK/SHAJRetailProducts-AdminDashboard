@@ -17,23 +17,6 @@ import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorState from "../components/common/ErrorState";
 import { isFeatureEnabled } from "../utils/featureFlags";
 
-const fallbackRevenue = [
-  { month: "Aug", revenue: 24000 },
-  { month: "Sep", revenue: 28000 },
-  { month: "Oct", revenue: 32000 },
-  { month: "Nov", revenue: 36000 },
-  { month: "Dec", revenue: 41000 },
-  { month: "Jan", revenue: 46000 }
-];
-
-const fallbackTopTenants = [
-  { name: "Urban Mart", revenue: 12000 },
-  { name: "FreshLane", revenue: 9500 },
-  { name: "Central Grocers", revenue: 8900 },
-  { name: "City Choice", revenue: 7700 },
-  { name: "Prime Basket", revenue: 6900 }
-];
-
 const Reports = () => {
   const dispatch = useAppDispatch();
   const { data, status, error } = useAppSelector((state) => state.reports);
@@ -51,8 +34,8 @@ const Reports = () => {
   if (status === "loading") return <LoadingSpinner />;
   if (status === "failed") return <ErrorState message={error} />;
 
-  const revenueSeries = data?.revenueSeries?.length ? data.revenueSeries : fallbackRevenue;
-  const topTenants = data?.topTenants?.length ? data.topTenants : fallbackTopTenants;
+  const revenueSeries = Array.isArray(data?.revenueSeries) ? data.revenueSeries : [];
+  const topTenants = Array.isArray(data?.topTenants) ? data.topTenants : [];
 
   return (
     <Box>
@@ -107,7 +90,7 @@ const Reports = () => {
                 Subscription Payment History
               </Typography>
               <Typography variant="body2" sx={{ color: "#64748b" }}>
-                Hook this section to `/platform/subscriptions` to render payment rows by tenant.
+                No subscription payment history available.
               </Typography>
             </CardContent>
           </Card>

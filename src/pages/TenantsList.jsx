@@ -33,7 +33,19 @@ import ToastContext from "../components/common/ToastProvider";
 const TenantsList = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const { list, total, page, pageSize, filters, status, error, saveStatus, saveError } =
+  const {
+    list,
+    total,
+    page,
+    pageSize,
+    filters,
+    status,
+    error,
+    saveStatus,
+    saveError,
+    createStatus,
+    createError
+  } =
     useAppSelector((state) => state.tenants);
   const { showToast } = useContext(ToastContext);
   const searchInputRef = useRef(null);
@@ -100,7 +112,12 @@ const TenantsList = () => {
         form.subscription_amount === "" ? undefined : Number(form.subscription_amount)
     };
     delete payload.domain_name;
-    await dispatch(createNewTenant(payload));
+    const result = await dispatch(createNewTenant(payload));
+    if (createNewTenant.rejected.match(result)) {
+      showToast(result.payload || "Failed to create tenant");
+      return;
+    }
+    showToast("Tenant created");
     setOpen(false);
     dispatch(fetchTenants());
   };
@@ -456,8 +473,12 @@ const TenantsList = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleCreateTenant} disabled={saveStatus === "loading"}>
-            Create
+          <Button
+            variant="contained"
+            onClick={handleCreateTenant}
+            disabled={createStatus === "loading"}
+          >
+            {createStatus === "loading" ? "Creating..." : "Create"}
           </Button>
         </DialogActions>
       </Dialog>
