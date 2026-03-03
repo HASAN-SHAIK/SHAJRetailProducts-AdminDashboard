@@ -10,7 +10,8 @@ import {
   getTenantUsers,
   updateTenantUserRole,
   upgradeTenantPlan,
-  renewTenantPlan
+  renewTenantPlan,
+  updateTenantAddons
 } from "../../api/tenants";
 import { resolveTenantFeatures } from "../../utils/featureFlags";
 
@@ -134,6 +135,8 @@ const initialState = {
   renewedSubscription: null,
   updateUserRoleStatus: "idle",
   updateUserRoleError: null,
+  addonSaveStatus: "idle",
+  addonSaveError: null,
   saveStatus: "idle",
   saveError: null,
   status: "idle",
@@ -295,6 +298,23 @@ export const renewTenantSubscription = createAsyncThunk(
       return thunkAPI.rejectWithValue(
         error?.response?.data?.message || "Failed to renew subscription"
       );
+    }
+  }
+);
+
+export const saveTenantAddons = createAsyncThunk(
+  "tenants/saveAddons",
+  async ({ id, addons }, thunkAPI) => {
+    try {
+      const response = await updateTenantAddons(id, { addons });
+      const data = response.data;
+      if (!data?.tenant && !data?.data?.tenant) {
+        thunkAPI.dispatch(fetchTenant(id));
+        thunkAPI.dispatch(fetchTenants());
+      }
+      return data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error?.response?.data?.message || "Failed to update add-ons");
     }
   }
 );
@@ -510,6 +530,23 @@ const tenantsSlice = createSlice({
       .addCase(renewTenantSubscription.rejected, (state, action) => {
         state.renewStatus = "failed";
         state.renewError = action.payload || "Failed to renew subscription";
+      })
+      .addCase(saveTenantAddons.pending, (state) => {
+        state.addonSaveStatus = "loading";
+        state.addonSaveError = null;
+      })
+      .addCase(saveTenantAddons.fulfilled, (state, action) => {
+        state.addonSaveStatus = "succeeded";
+        const tenant = action.payload?.data?.tenant || action.payload?.tenant || state.selected;
+        if (tenant) {
+          const normalized = normalizeTenant(tenant);
+          state.selected = normalized;
+          state.list = updateTenantInList(state.list, normalized);
+        }
+      })
+      .addCase(saveTenantAddons.rejected, (state, action) => {
+        state.addonSaveStatus = "failed";
+        state.addonSaveError = action.payload || "Failed to update add-ons";
       });
   }
 });

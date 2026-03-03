@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Box,
   Button,
@@ -25,7 +25,8 @@ import {
   updateTenantUserRoleAction,
   upgradeTenantSubscription,
   renewTenantSubscription,
-  saveTenant
+  saveTenant,
+  saveTenantAddons
 } from "../features/tenants/tenantsSlice";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorState from "../components/common/ErrorState";
@@ -58,6 +59,8 @@ const TenantDetails = () => {
     upgradeError,
     renewStatus,
     renewError,
+    addonSaveStatus,
+    addonSaveError,
     saveStatus,
     saveError
   } = useAppSelector((state) => state.tenants);
@@ -90,6 +93,27 @@ const TenantDetails = () => {
     payment_status: "",
     payment_method: ""
   });
+  const addonDefinitions = useMemo(
+    () => [
+      { key: "HSN_MODULE", label: "HSN Module" },
+      { key: "CUSTOMER_MODULE", label: "Customer Module" },
+      { key: "WHATSAPP_BILL", label: "WhatsApp Bill" },
+      { key: "ORDER_NOTIFICATION", label: "Order Notification" },
+      { key: "enable_barcode", label: "Barcode Scanner" }
+    ],
+    []
+  );
+  const buildAddonState = useCallback(
+    (source) =>
+      addonDefinitions.reduce((acc, addon) => {
+        const value = source?.[addon.key];
+        acc[addon.key] = typeof value === "boolean" ? value : false;
+        return acc;
+      }, {}),
+    [addonDefinitions]
+  );
+  const [addonInitial, setAddonInitial] = useState(() => buildAddonState(null));
+  const [addonForm, setAddonForm] = useState(() => buildAddonState(null));
   const [isEditingGst, setIsEditingGst] = useState(false);
   const [gstValue, setGstValue] = useState("");
 
@@ -104,6 +128,13 @@ const TenantDetails = () => {
   useEffect(() => {
     setGstValue(selected?.shop_details?.gst_number || selected?.gst_number || "");
   }, [selected?.gst_number, selected?.shop_details?.gst_number]);
+
+  useEffect(() => {
+    const source = selected?.addons || selected?.add_ons || selected?.addon || null;
+    const nextState = buildAddonState(source);
+    setAddonInitial(nextState);
+    setAddonForm(nextState);
+  }, [selected, buildAddonState]);
 
   const metrics = useMemo(
     () => ({
@@ -205,6 +236,23 @@ const TenantDetails = () => {
     );
     if (!saveTenant.rejected.match(result)) {
       setIsEditingGst(false);
+    }
+  };
+
+  const handleAddonToggle = (key) => (event) => {
+    const checked = event.target.checked;
+    setAddonForm((prev) => ({ ...prev, [key]: checked }));
+  };
+
+  const isAddonDirty = useMemo(
+    () => addonDefinitions.some((addon) => addonForm[addon.key] !== addonInitial[addon.key]),
+    [addonDefinitions, addonForm, addonInitial]
+  );
+
+  const handleSaveAddons = async () => {
+    const result = await dispatch(saveTenantAddons({ id, addons: addonForm }));
+    if (!saveTenantAddons.rejected.match(result)) {
+      setAddonInitial(addonForm);
     }
   };
 
@@ -380,6 +428,54 @@ const TenantDetails = () => {
           <Card>
             <CardContent>
               <FeatureFlags planFeatures={planFeatures} />
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Add-ons
+              </Typography>
+              <Stack spacing={1}>
+                {addonDefinitions.map((addon) => (
+                  <Stack
+                    key={addon.key}
+                    direction="row"
+                    spacing={2}
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
+                    <Typography variant="body1">{addon.label}</Typography>
+                    <Switch
+                      checked={Boolean(addonForm[addon.key])}
+                      onChange={handleAddonToggle(addon.key)}
+                      disabled={addonSaveStatus === "loading"}
+                    />
+                  </Stack>
+                ))}
+              </Stack>
+              <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+                <Button
+                  variant="contained"
+                  onClick={handleSaveAddons}
+                  disabled={!isAddonDirty || addonSaveStatus === "loading"}
+                >
+                  {addonSaveStatus === "loading" ? "Saving..." : "Save Add-ons"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setAddonForm(addonInitial)}
+                  disabled={!isAddonDirty || addonSaveStatus === "loading"}
+                >
+                  Reset
+                </Button>
+              </Stack>
+              {addonSaveStatus === "failed" && addonSaveError && (
+                <Box sx={{ mt: 2 }}>
+                  <ErrorState message={addonSaveError} />
+                </Box>
+              )}
             </CardContent>
           </Card>
         </Grid>

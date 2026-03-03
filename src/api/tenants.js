@@ -26,4 +26,7 @@ export const upgradeTenantPlan = (id, payload) =>
 
 export const renewTenantPlan = (id, payload) =>
   api.post(`/tenants/${id}/renew-plan`, payload);
+
+export const updateTenantAddons = (id, payload) =>
+  api.patch(`/tenants/${id}/addons`, payload);
  
