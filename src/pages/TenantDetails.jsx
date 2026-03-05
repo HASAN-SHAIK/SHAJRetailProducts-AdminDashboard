@@ -42,8 +42,8 @@ const TenantDetails = () => {
   const dispatch = useAppDispatch();
   const {
     selected,
-    status,
-    error,
+    selectedStatus,
+    selectedError,
     importStatus,
     importError,
     importResult,
@@ -272,8 +272,18 @@ const TenantDetails = () => {
     }
   ];
 
-  if (status === "loading") return <LoadingSpinner />;
-  if (status === "failed") return <ErrorState message={error} />;
+  if (selectedStatus === "loading")
+    return (
+      <Box sx={{ py: 6 }}>
+        <Stack spacing={1} alignItems="center">
+          <LoadingSpinner />
+          <Typography variant="body2" sx={{ color: "#64748b" }}>
+            Tenant details are loading...
+          </Typography>
+        </Stack>
+      </Box>
+    );
+  if (selectedStatus === "failed") return <ErrorState message={selectedError} />;
   if (!selected) return <ErrorState message="No tenant data available." />;
 
   const tenant = selected;

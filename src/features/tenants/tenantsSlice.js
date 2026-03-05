@@ -116,6 +116,8 @@ const initialState = {
     query: ""
   },
   selected: null,
+  selectedStatus: "idle",
+  selectedError: null,
   importResult: null,
   importStatus: "idle",
   importError: null,
@@ -365,7 +367,12 @@ const tenantsSlice = createSlice({
         state.status = "failed";
         state.error = action.payload || "Failed to fetch tenants";
       })
+      .addCase(fetchTenant.pending, (state) => {
+        state.selectedStatus = "loading";
+        state.selectedError = null;
+      })
       .addCase(fetchTenant.fulfilled, (state, action) => {
+        state.selectedStatus = "succeeded";
         const payload = action.payload?.data || action.payload || null;
         const tenant = payload?.tenant || payload || null;
         const normalized = normalizeTenant(tenant);
@@ -386,6 +393,10 @@ const tenantsSlice = createSlice({
           };
         }
         state.selected = normalized;
+      })
+      .addCase(fetchTenant.rejected, (state, action) => {
+        state.selectedStatus = "failed";
+        state.selectedError = action.payload || "Failed to fetch tenant";
       })
       .addCase(saveTenant.pending, (state) => {
         state.saveStatus = "loading";

@@ -289,7 +289,12 @@ const TenantsList = () => {
 
       {status === "loading" ? (
         <Box sx={{ py: 6 }}>
-          <LoadingSpinner />
+          <Stack spacing={1} alignItems="center">
+            <LoadingSpinner />
+            <Typography variant="body2" sx={{ color: "#64748b" }}>
+              Tenants are loading...
+            </Typography>
+          </Stack>
         </Box>
       ) : status === "failed" ? (
         <ErrorState message={error} />
