@@ -17,6 +17,7 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
+import { getTenantBranches, createTenantBranch } from "../api/tenants";
 import {
   fetchTenant,
   importTenantProducts,
@@ -93,6 +94,13 @@ const TenantDetails = () => {
     payment_status: "",
     payment_method: ""
   });
+  const [branches, setBranches] = useState([]);
+  const [branchesStatus, setBranchesStatus] = useState("idle");
+  const [branchesError, setBranchesError] = useState("");
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
+  const [branchForm, setBranchForm] = useState({ name: "", location: "" });
+  const [branchCreateStatus, setBranchCreateStatus] = useState("idle");
+  const [branchCreateError, setBranchCreateError] = useState("");
   const addonDefinitions = useMemo(
     () => [
       { key: "HSN_MODULE", label: "HSN Module" },
@@ -124,6 +132,31 @@ const TenantDetails = () => {
   useEffect(() => {
     dispatch(fetchTenantUsers(id));
   }, [dispatch, id]);
+
+  const fetchBranches = useCallback(async () => {
+    if (!id) return;
+    setBranchesStatus("loading");
+    setBranchesError("");
+    try {
+      const response = await getTenantBranches(id);
+      const payload =
+        response?.data?.branches ||
+        response?.data?.data?.branches ||
+        response?.data?.data ||
+        response?.data?.branches ||
+        [];
+      setBranches(Array.isArray(payload) ? payload : []);
+      setBranchesStatus("succeeded");
+    } catch (error) {
+      setBranches([]);
+      setBranchesStatus("failed");
+      setBranchesError(error?.response?.data?.message || "Failed to load branches");
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchBranches();
+  }, [fetchBranches]);
 
   useEffect(() => {
     setGstValue(selected?.shop_details?.gst_number || selected?.gst_number || "");
@@ -197,6 +230,36 @@ const TenantDetails = () => {
         payment_status: "",
         payment_method: ""
       });
+    }
+  };
+
+  const handleCreateBranch = async () => {
+    const name = String(branchForm.name || "").trim();
+    if (!name) return;
+    setBranchCreateStatus("loading");
+    setBranchCreateError("");
+    try {
+      const response = await createTenantBranch(id, {
+        name,
+        location: branchForm.location || undefined
+      });
+      const branch =
+        response?.data?.branch ||
+        response?.data?.data?.branch ||
+        response?.data?.data ||
+        response?.data?.branch ||
+        null;
+      if (branch) {
+        setBranches((prev) => [branch, ...prev]);
+      } else {
+        await fetchBranches();
+      }
+      setBranchDialogOpen(false);
+      setBranchForm({ name: "", location: "" });
+    } catch (error) {
+      setBranchCreateError(error?.response?.data?.message || "Failed to create branch");
+    } finally {
+      setBranchCreateStatus("idle");
     }
   };
 
@@ -310,6 +373,15 @@ const TenantDetails = () => {
     { id: "amount", label: "Amount" },
     { id: "date", label: "Date" },
     { id: "status", label: "Status" }
+  ];
+  const branchColumns = [
+    { id: "name", label: "Branch Name" },
+    { id: "location", label: "Location" },
+    {
+      id: "created_at",
+      label: "Created",
+      render: (row) => (row.created_at ? formatDateTimeIST(row.created_at) : "-")
+    }
   ];
 
   return (
@@ -584,6 +656,33 @@ const TenantDetails = () => {
             </CardContent>
           </Card>
         </Grid>
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+                <Typography variant="h6">Branches</Typography>
+                <Button variant="contained" onClick={() => setBranchDialogOpen(true)}>
+                  Add Branch
+                </Button>
+              </Stack>
+              {branchesStatus === "loading" && <LoadingSpinner />}
+              {branchesStatus === "failed" && branchesError && <ErrorState message={branchesError} />}
+              {branchesStatus === "succeeded" && branches.length === 0 && (
+                <Typography variant="body2" sx={{ color: "#64748b" }}>
+                  No branches created yet.
+                </Typography>
+              )}
+              {branchesStatus === "succeeded" && branches.length > 0 && (
+                <DataTable columns={branchColumns} rows={branches} />
+              )}
+              {branchCreateError && (
+                <Box sx={{ mt: 2 }}>
+                  <ErrorState message={branchCreateError} />
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
         <Dialog open={userDialogOpen} onClose={() => setUserDialogOpen(false)} fullWidth maxWidth="sm">
           <DialogTitle>Register Tenant User</DialogTitle>
           <DialogContent>
@@ -629,6 +728,40 @@ const TenantDetails = () => {
               disabled={createUserStatus === "loading"}
             >
               {createUserStatus === "loading" ? "Creating..." : "Create User"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog
+          open={branchDialogOpen}
+          onClose={() => setBranchDialogOpen(false)}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>Create Branch</DialogTitle>
+          <DialogContent>
+            <TextField
+              margin="dense"
+              label="Branch Name"
+              fullWidth
+              value={branchForm.name}
+              onChange={(e) => setBranchForm((prev) => ({ ...prev, name: e.target.value }))}
+            />
+            <TextField
+              margin="dense"
+              label="Location"
+              fullWidth
+              value={branchForm.location}
+              onChange={(e) => setBranchForm((prev) => ({ ...prev, location: e.target.value }))}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setBranchDialogOpen(false)}>Cancel</Button>
+            <Button
+              variant="contained"
+              onClick={handleCreateBranch}
+              disabled={branchCreateStatus === "loading" || !branchForm.name.trim()}
+            >
+              {branchCreateStatus === "loading" ? "Creating..." : "Create Branch"}
             </Button>
           </DialogActions>
         </Dialog>
