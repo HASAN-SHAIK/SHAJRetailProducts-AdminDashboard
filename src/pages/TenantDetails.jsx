@@ -98,7 +98,12 @@ const TenantDetails = () => {
   const [branchesStatus, setBranchesStatus] = useState("idle");
   const [branchesError, setBranchesError] = useState("");
   const [branchDialogOpen, setBranchDialogOpen] = useState(false);
-  const [branchForm, setBranchForm] = useState({ name: "", location: "" });
+  const [branchForm, setBranchForm] = useState({
+    name: "",
+    location: "",
+    subscription_plan: "basic",
+    max_devices_allowed: ""
+  });
   const [branchCreateStatus, setBranchCreateStatus] = useState("idle");
   const [branchCreateError, setBranchCreateError] = useState("");
   const addonDefinitions = useMemo(
@@ -168,6 +173,19 @@ const TenantDetails = () => {
     setAddonInitial(nextState);
     setAddonForm(nextState);
   }, [selected, buildAddonState]);
+
+  useEffect(() => {
+    if (!branchDialogOpen) return;
+    const defaultPlan =
+      selected?.subscription?.plan ||
+      selected?.plan_type ||
+      selected?.plan ||
+      "basic";
+    setBranchForm((prev) => ({
+      ...prev,
+      subscription_plan: prev.subscription_plan || defaultPlan || "basic"
+    }));
+  }, [branchDialogOpen, selected]);
 
   const metrics = useMemo(
     () => ({
@@ -241,7 +259,12 @@ const TenantDetails = () => {
     try {
       const response = await createTenantBranch(id, {
         name,
-        location: branchForm.location || undefined
+        location: branchForm.location || undefined,
+        subscription_plan: branchForm.subscription_plan || undefined,
+        max_devices_allowed:
+          branchForm.max_devices_allowed === ""
+            ? undefined
+            : Number(branchForm.max_devices_allowed)
       });
       const branch =
         response?.data?.branch ||
@@ -255,7 +278,12 @@ const TenantDetails = () => {
         await fetchBranches();
       }
       setBranchDialogOpen(false);
-      setBranchForm({ name: "", location: "" });
+      setBranchForm({
+        name: "",
+        location: "",
+        subscription_plan: "basic",
+        max_devices_allowed: ""
+      });
     } catch (error) {
       setBranchCreateError(error?.response?.data?.message || "Failed to create branch");
     } finally {
@@ -374,9 +402,23 @@ const TenantDetails = () => {
     { id: "date", label: "Date" },
     { id: "status", label: "Status" }
   ];
+  const branchPlanOptions = ["basic", "pro", "premium", "enterprise"];
   const branchColumns = [
     { id: "name", label: "Branch Name" },
     { id: "location", label: "Location" },
+    {
+      id: "subscription_plan",
+      label: "Plan",
+      render: (row) => (row.subscription_plan ? String(row.subscription_plan) : "-")
+    },
+    {
+      id: "max_devices_allowed",
+      label: "Device Limit",
+      render: (row) =>
+        row.max_devices_allowed === null || row.max_devices_allowed === undefined
+          ? "Unlimited"
+          : row.max_devices_allowed
+    },
     {
       id: "created_at",
       label: "Created",
@@ -752,6 +794,33 @@ const TenantDetails = () => {
               fullWidth
               value={branchForm.location}
               onChange={(e) => setBranchForm((prev) => ({ ...prev, location: e.target.value }))}
+            />
+            <TextField
+              margin="dense"
+              label="Subscription Plan"
+              select
+              fullWidth
+              value={branchForm.subscription_plan}
+              onChange={(e) =>
+                setBranchForm((prev) => ({ ...prev, subscription_plan: e.target.value }))
+              }
+            >
+              {branchPlanOptions.map((plan) => (
+                <MenuItem key={plan} value={plan}>
+                  {plan}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              margin="dense"
+              label="Max Devices Allowed (optional)"
+              type="number"
+              fullWidth
+              value={branchForm.max_devices_allowed}
+              onChange={(e) =>
+                setBranchForm((prev) => ({ ...prev, max_devices_allowed: e.target.value }))
+              }
+              helperText="Leave empty to use plan default (enterprise can be unlimited)."
             />
           </DialogContent>
           <DialogActions>
