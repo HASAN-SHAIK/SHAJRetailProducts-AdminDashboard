@@ -1,0 +1,74 @@
+name: CI - Unit and E2E Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: unit-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit/component tests (Vitest)
+        run: npm test
+
+  e2e:
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: e2e-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests (Playwright - ${{ matrix.browser }})
+        env:
+          # Override if you have a hosted/staging URL:
+          # E2E_BASE_URL: https://staging.example.com
+          # API_BASE_URL: https://staging-api.example.com
+          CI: "true"
+        run: npx playwright test --project=${{ matrix.browser }}
+
+      - name: Upload Playwright HTML report (${{ matrix.browser }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: playwright-report
+          if-no-files-found: ignore
