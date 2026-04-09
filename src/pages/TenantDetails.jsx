@@ -17,7 +17,7 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
-import { getTenantBranches, createTenantBranch } from "../api/tenants";
+import { getTenantBranches, createTenantBranch, updateTenantBranch } from "../api/tenants";
 import {
   fetchTenant,
   importTenantProducts,
@@ -106,6 +106,14 @@ const TenantDetails = () => {
   });
   const [branchCreateStatus, setBranchCreateStatus] = useState("idle");
   const [branchCreateError, setBranchCreateError] = useState("");
+  const [branchEditDialogOpen, setBranchEditDialogOpen] = useState(false);
+  const [branchEditStatus, setBranchEditStatus] = useState("idle");
+  const [branchEditError, setBranchEditError] = useState("");
+  const [branchEditForm, setBranchEditForm] = useState({
+    id: null,
+    name: "",
+    max_devices_allowed: ""
+  });
   const addonDefinitions = useMemo(
     () => [
       { key: "HSN_MODULE", label: "HSN Module" },
@@ -301,6 +309,50 @@ const TenantDetails = () => {
     setEditUserDialogOpen(true);
   };
 
+  const handleOpenBranchEdit = (branch) => {
+    setBranchEditForm({
+      id: branch?.id ?? null,
+      name: branch?.name || "",
+      max_devices_allowed:
+        branch?.max_devices_allowed === null || branch?.max_devices_allowed === undefined
+          ? ""
+          : String(branch.max_devices_allowed)
+    });
+    setBranchEditError("");
+    setBranchEditDialogOpen(true);
+  };
+
+  const handleUpdateBranchLimit = async () => {
+    if (!branchEditForm.id) return;
+    setBranchEditStatus("loading");
+    setBranchEditError("");
+    try {
+      const payload = {
+        max_devices_allowed:
+          branchEditForm.max_devices_allowed === ""
+            ? null
+            : Number(branchEditForm.max_devices_allowed)
+      };
+      const response = await updateTenantBranch(id, branchEditForm.id, payload);
+      const branch =
+        response?.data?.branch ||
+        response?.data?.data?.branch ||
+        response?.data?.data ||
+        response?.data?.branch ||
+        null;
+      if (branch) {
+        setBranches((prev) => prev.map((item) => (item.id === branch.id ? branch : item)));
+      } else {
+        await fetchBranches();
+      }
+      setBranchEditDialogOpen(false);
+      setBranchEditStatus("idle");
+    } catch (error) {
+      setBranchEditError(error?.response?.data?.message || "Failed to update branch");
+      setBranchEditStatus("failed");
+    }
+  };
+
   const handleUpdateUserRole = async () => {
     if (!editUserForm.id) return;
     const result = await dispatch(
@@ -423,6 +475,15 @@ const TenantDetails = () => {
       id: "created_at",
       label: "Created",
       render: (row) => (row.created_at ? formatDateTimeIST(row.created_at) : "-")
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      render: (row) => (
+        <Button size="small" variant="outlined" onClick={() => handleOpenBranchEdit(row)}>
+          Edit Device Limit
+        </Button>
+      )
     }
   ];
 
@@ -831,6 +892,49 @@ const TenantDetails = () => {
               disabled={branchCreateStatus === "loading" || !branchForm.name.trim()}
             >
               {branchCreateStatus === "loading" ? "Creating..." : "Create Branch"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog
+          open={branchEditDialogOpen}
+          onClose={() => setBranchEditDialogOpen(false)}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>Edit Branch Device Limit</DialogTitle>
+          <DialogContent>
+            <TextField
+              margin="dense"
+              label="Branch Name"
+              fullWidth
+              value={branchEditForm.name}
+              InputProps={{ readOnly: true }}
+            />
+            <TextField
+              margin="dense"
+              label="Max Devices Allowed"
+              type="number"
+              fullWidth
+              value={branchEditForm.max_devices_allowed}
+              onChange={(e) =>
+                setBranchEditForm((prev) => ({ ...prev, max_devices_allowed: e.target.value }))
+              }
+              helperText="Leave empty to use plan default."
+            />
+            {branchEditStatus === "failed" && branchEditError && (
+              <Box sx={{ mt: 2 }}>
+                <ErrorState message={branchEditError} />
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setBranchEditDialogOpen(false)}>Cancel</Button>
+            <Button
+              variant="contained"
+              onClick={handleUpdateBranchLimit}
+              disabled={branchEditStatus === "loading"}
+            >
+              {branchEditStatus === "loading" ? "Saving..." : "Save"}
             </Button>
           </DialogActions>
         </Dialog>
