@@ -112,7 +112,8 @@ const TenantDetails = () => {
       { key: "CUSTOMER_MODULE", label: "Customer Module" },
       { key: "WHATSAPP_BILL", label: "WhatsApp Bill" },
       { key: "ORDER_NOTIFICATION", label: "Order Notification" },
-      { key: "enable_barcode", label: "Barcode Scanner" }
+      { key: "enable_barcode", label: "Barcode Scanner" },
+      { key: "mobile_access", label: "Mobile Access" }
     ],
     []
   );
