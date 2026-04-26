@@ -24,6 +24,8 @@ export const getTenantBranches = (id) => api.get(`/tenants/${id}/branches`);
 export const createTenantBranch = (id, payload) => api.post(`/tenants/${id}/branches`, payload);
 
 export const updateTenantUserRole = (userId, payload) => api.patch(`/users/${userId}/role`, payload);
+export const unregisterTenantUser = (tenantId, userId) =>
+  api.delete(`/tenants/${tenantId}/users/${userId}`);
 
 export const upgradeTenantPlan = (id, payload) =>
   api.post(`/tenants/${id}/upgrade-plan`, payload);

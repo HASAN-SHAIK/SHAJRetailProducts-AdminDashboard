@@ -9,6 +9,7 @@ import {
   createTenantUser,
   getTenantUsers,
   updateTenantUserRole,
+  unregisterTenantUser,
   upgradeTenantPlan,
   renewTenantPlan,
   updateTenantAddons
@@ -137,6 +138,8 @@ const initialState = {
   renewedSubscription: null,
   updateUserRoleStatus: "idle",
   updateUserRoleError: null,
+  unregisterUserStatus: "idle",
+  unregisterUserError: null,
   addonSaveStatus: "idle",
   addonSaveError: null,
   saveStatus: "idle",
@@ -271,6 +274,20 @@ export const updateTenantUserRoleAction = createAsyncThunk(
     } catch (error) {
       return thunkAPI.rejectWithValue(
         error?.response?.data?.message || "Failed to update user role"
+      );
+    }
+  }
+);
+
+export const unregisterTenantUserAction = createAsyncThunk(
+  "tenants/unregisterUser",
+  async ({ tenantId, userId }, thunkAPI) => {
+    try {
+      const response = await unregisterTenantUser(tenantId, userId);
+      return response.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error?.response?.data?.message || "Failed to unregister user"
       );
     }
   }
@@ -501,6 +518,23 @@ const tenantsSlice = createSlice({
       .addCase(updateTenantUserRoleAction.rejected, (state, action) => {
         state.updateUserRoleStatus = "failed";
         state.updateUserRoleError = action.payload || "Failed to update user role";
+      })
+      .addCase(unregisterTenantUserAction.pending, (state) => {
+        state.unregisterUserStatus = "loading";
+        state.unregisterUserError = null;
+      })
+      .addCase(unregisterTenantUserAction.fulfilled, (state, action) => {
+        state.unregisterUserStatus = "succeeded";
+        const removedUser = action.payload?.data?.user || action.payload?.user || null;
+        if (removedUser) {
+          state.users = state.users.filter(
+            (user) => String(user.id) !== String(removedUser.id)
+          );
+        }
+      })
+      .addCase(unregisterTenantUserAction.rejected, (state, action) => {
+        state.unregisterUserStatus = "failed";
+        state.unregisterUserError = action.payload || "Failed to unregister user";
       })
       .addCase(upgradeTenantSubscription.pending, (state) => {
         state.upgradeStatus = "loading";

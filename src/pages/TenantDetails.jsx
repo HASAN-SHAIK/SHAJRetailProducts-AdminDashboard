@@ -24,6 +24,7 @@ import {
   registerTenantUser,
   fetchTenantUsers,
   updateTenantUserRoleAction,
+  unregisterTenantUserAction,
   upgradeTenantSubscription,
   renewTenantSubscription,
   saveTenant,
@@ -56,6 +57,8 @@ const TenantDetails = () => {
     usersError,
     updateUserRoleStatus,
     updateUserRoleError,
+    unregisterUserStatus,
+    unregisterUserError,
     upgradeStatus,
     upgradeError,
     renewStatus,
@@ -312,6 +315,15 @@ const TenantDetails = () => {
     }
   };
 
+  const handleUnregisterUser = async (user) => {
+    if (!user?.id) return;
+    const confirmed = window.confirm(
+      `Unregister user "${user.name || user.email}"?\n\nThis will permanently remove this tenant login.`
+    );
+    if (!confirmed) return;
+    await dispatch(unregisterTenantUserAction({ tenantId: id, userId: user.id }));
+  };
+
   const handleGstSave = async () => {
     const shopDetails = selected?.shop_details || {};
     const result = await dispatch(
@@ -357,9 +369,20 @@ const TenantDetails = () => {
       id: "actions",
       label: "Actions",
       render: (row) => (
-        <Button size="small" variant="outlined" onClick={() => handleOpenEditUser(row)}>
-          Edit Role
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button size="small" variant="outlined" onClick={() => handleOpenEditUser(row)}>
+            Edit Role
+          </Button>
+          <Button
+            size="small"
+            color="error"
+            variant="outlined"
+            onClick={() => handleUnregisterUser(row)}
+            disabled={unregisterUserStatus === "loading"}
+          >
+            Unregister
+          </Button>
+        </Stack>
       )
     }
   ];
@@ -687,6 +710,11 @@ const TenantDetails = () => {
               {updateUserRoleStatus === "failed" && updateUserRoleError && (
                 <Box sx={{ mt: 2 }}>
                   <ErrorState message={updateUserRoleError} />
+                </Box>
+              )}
+              {unregisterUserStatus === "failed" && unregisterUserError && (
+                <Box sx={{ mt: 2 }}>
+                  <ErrorState message={unregisterUserError} />
                 </Box>
               )}
               {createUserStatus === "succeeded" && createdUser && (
