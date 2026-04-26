@@ -75,7 +75,9 @@ const TenantDetails = () => {
     name: "",
     email: "",
     password: "",
-    role: "admin"
+    role: "admin",
+    all_branch_access: true,
+    branch_id: ""
   });
   const [editUserDialogOpen, setEditUserDialogOpen] = useState(false);
   const [editUserForm, setEditUserForm] = useState({
@@ -212,12 +214,26 @@ const TenantDetails = () => {
   };
 
   const handleRegisterUser = async () => {
-    const result = await dispatch(registerTenantUser({ id, payload: userForm }));
+    if (!userForm.all_branch_access && !String(userForm.branch_id || "").trim()) {
+      return;
+    }
+    const payload = {
+      ...userForm,
+      branch_id: userForm.all_branch_access ? undefined : userForm.branch_id || undefined
+    };
+    const result = await dispatch(registerTenantUser({ id, payload }));
     if (registerTenantUser.rejected.match(result)) {
       return;
     }
     setUserDialogOpen(false);
-    setUserForm({ name: "", email: "", password: "", role: "admin" });
+    setUserForm({
+      name: "",
+      email: "",
+      password: "",
+      role: "admin",
+      all_branch_access: true,
+      branch_id: ""
+    });
   };
 
   const handleUpgradePlan = async () => {
@@ -364,6 +380,18 @@ const TenantDetails = () => {
     { id: "name", label: "Name" },
     { id: "email", label: "Email" },
     { id: "role", label: "Role" },
+    {
+      id: "branch_access",
+      label: "Branch Access",
+      render: (row) => {
+        const hasAllBranchAccess =
+          row?.all_branch_access === true ||
+          row?.all_branch_access === 1 ||
+          String(row?.all_branch_access || "").toLowerCase() === "true";
+        if (hasAllBranchAccess) return "All Branches";
+        return row?.branch_name || row?.branch_id || "Specific Branch";
+      }
+    },
     { id: "created_at", label: "Created" },
     {
       id: "actions",
@@ -790,13 +818,54 @@ const TenantDetails = () => {
               <MenuItem value="admin">Admin</MenuItem>
               <MenuItem value="staff">Staff</MenuItem>
             </TextField>
+            <TextField
+              margin="dense"
+              label="Access Scope"
+              select
+              fullWidth
+              value={userForm.all_branch_access ? "all" : "specific"}
+              onChange={(e) =>
+                setUserForm((prev) => ({
+                  ...prev,
+                  all_branch_access: e.target.value === "all",
+                  branch_id: e.target.value === "all" ? "" : prev.branch_id
+                }))
+              }
+            >
+              <MenuItem value="all">All Branches</MenuItem>
+              <MenuItem value="specific">Specific Branch</MenuItem>
+            </TextField>
+            {!userForm.all_branch_access && (
+              <TextField
+                margin="dense"
+                label="Branch"
+                select
+                fullWidth
+                value={userForm.branch_id}
+                onChange={(e) => setUserForm((prev) => ({ ...prev, branch_id: e.target.value }))}
+                helperText={
+                  branches.length
+                    ? "User access will be limited to this branch."
+                    : "Create a branch first to assign specific branch access."
+                }
+              >
+                {branches.map((branch, index) => (
+                  <MenuItem key={branch?.id || `register-branch-${index}`} value={String(branch?.id || "")}>
+                    {branch?.name || branch?.location || `Branch ${index + 1}`}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setUserDialogOpen(false)}>Cancel</Button>
             <Button
               variant="contained"
               onClick={handleRegisterUser}
-              disabled={createUserStatus === "loading"}
+              disabled={
+                createUserStatus === "loading" ||
+                (!userForm.all_branch_access && !String(userForm.branch_id || "").trim())
+              }
             >
               {createUserStatus === "loading" ? "Creating..." : "Create User"}
             </Button>
