@@ -24,6 +24,10 @@ export const getTenantBranches = (id) => api.get(`/tenants/${id}/branches`);
 export const createTenantBranch = (id, payload) => api.post(`/tenants/${id}/branches`, payload);
 export const updateTenantBranch = (tenantId, branchId, payload) =>
   api.patch(`/tenants/${tenantId}/branches/${branchId}`, payload);
+export const getTenantBranchDevices = (tenantId, branchId) =>
+  api.get(`/tenants/${tenantId}/branches/${branchId}/devices`);
+export const removeTenantBranchDevice = (tenantId, branchId, deviceId) =>
+  api.patch(`/tenants/${tenantId}/branches/${branchId}/devices/${deviceId}/deactivate`);
 
 export const updateTenantUserRole = (userId, payload) => api.patch(`/users/${userId}/role`, payload);
 export const unregisterTenantUser = (tenantId, userId) =>
