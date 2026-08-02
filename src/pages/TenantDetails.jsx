@@ -17,7 +17,13 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
-import { getTenantBranches, createTenantBranch, updateTenantBranch } from "../api/tenants";
+import {
+  getTenantBranches,
+  createTenantBranch,
+  updateTenantBranch,
+  getTenantBranchDevices,
+  removeTenantBranchDevice
+} from "../api/tenants";
 import {
   fetchTenant,
   importTenantProducts,
@@ -119,6 +125,14 @@ const TenantDetails = () => {
   });
   const [branchUpdateStatus, setBranchUpdateStatus] = useState("idle");
   const [branchUpdateError, setBranchUpdateError] = useState("");
+  const [devicesDialogOpen, setDevicesDialogOpen] = useState(false);
+  const [devicesBranch, setDevicesBranch] = useState(null);
+  const [branchDevices, setBranchDevices] = useState([]);
+  const [devicesMeta, setDevicesMeta] = useState({ active_count: 0 });
+  const [devicesStatus, setDevicesStatus] = useState("idle");
+  const [devicesError, setDevicesError] = useState("");
+  const [deviceRemoveStatus, setDeviceRemoveStatus] = useState("idle");
+  const [deviceRemoveError, setDeviceRemoveError] = useState("");
   const addonDefinitions = useMemo(
     () => [
       { key: "HSN_MODULE", label: "HSN Module" },
@@ -387,6 +401,56 @@ const TenantDetails = () => {
     }
   };
 
+  const fetchBranchDevices = async (branch) => {
+    const branchId = branch?.id || devicesBranch?.id;
+    if (!id || !branchId) return;
+    setDevicesStatus("loading");
+    setDevicesError("");
+    try {
+      const response = await getTenantBranchDevices(id, branchId);
+      const payload = response?.data?.data || response?.data || {};
+      setBranchDevices(Array.isArray(payload.devices) ? payload.devices : []);
+      setDevicesMeta({
+        active_count: payload.active_count || 0,
+        branch: payload.branch || branch || null
+      });
+      setDevicesStatus("succeeded");
+    } catch (error) {
+      setBranchDevices([]);
+      setDevicesStatus("failed");
+      setDevicesError(error?.response?.data?.message || "Failed to load branch devices");
+    }
+  };
+
+  const handleOpenBranchDevices = async (branch) => {
+    setDevicesBranch(branch);
+    setBranchDevices([]);
+    setDevicesMeta({ active_count: 0, branch });
+    setDevicesError("");
+    setDeviceRemoveError("");
+    setDevicesDialogOpen(true);
+    await fetchBranchDevices(branch);
+  };
+
+  const handleRemoveBranchDevice = async (device) => {
+    if (!devicesBranch?.id || !device?.id) return;
+    const label = device.device_name || device.device_id || "this device";
+    const confirmed = window.confirm(
+      `Remove "${label}" from branch "${devicesBranch.name || devicesBranch.location || "Branch"}"?\n\nThe device will need to register again before it can use this branch.`
+    );
+    if (!confirmed) return;
+    setDeviceRemoveStatus("loading");
+    setDeviceRemoveError("");
+    try {
+      await removeTenantBranchDevice(id, devicesBranch.id, device.id);
+      await fetchBranchDevices(devicesBranch);
+    } catch (error) {
+      setDeviceRemoveError(error?.response?.data?.message || "Failed to remove device");
+    } finally {
+      setDeviceRemoveStatus("idle");
+    }
+  };
+
   const handleUnregisterUser = async (user) => {
     if (!user?.id) return;
     const confirmed = window.confirm(
@@ -536,8 +600,50 @@ const TenantDetails = () => {
       id: "actions",
       label: "Actions",
       render: (row) => (
-        <Button size="small" variant="outlined" onClick={() => handleOpenEditBranch(row)}>
-          Edit Limit
+        <Stack direction="row" spacing={1}>
+          <Button size="small" variant="outlined" onClick={() => handleOpenBranchDevices(row)}>
+            Devices
+          </Button>
+          <Button size="small" variant="outlined" onClick={() => handleOpenEditBranch(row)}>
+            Edit Limit
+          </Button>
+        </Stack>
+      )
+    }
+  ];
+  const deviceColumns = [
+    {
+      id: "device_name",
+      label: "Device",
+      render: (row) => row.device_name || row.device_id || "-"
+    },
+    {
+      id: "device_id",
+      label: "Device ID",
+      render: (row) => row.device_id || "-"
+    },
+    {
+      id: "status",
+      label: "Status",
+      render: (row) => (row.is_active ? "Active" : "Removed")
+    },
+    {
+      id: "last_login_at",
+      label: "Last Login",
+      render: (row) => (row.last_login_at ? formatDateTimeIST(row.last_login_at) : "-")
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      render: (row) => (
+        <Button
+          size="small"
+          color="error"
+          variant="outlined"
+          onClick={() => handleRemoveBranchDevice(row)}
+          disabled={!row.is_active || deviceRemoveStatus === "loading"}
+        >
+          {row.is_active ? "Remove" : "Removed"}
         </Button>
       )
     }
@@ -1088,6 +1194,42 @@ const TenantDetails = () => {
             >
               {branchUpdateStatus === "loading" ? "Saving..." : "Save"}
             </Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog
+          open={devicesDialogOpen}
+          onClose={() => setDevicesDialogOpen(false)}
+          fullWidth
+          maxWidth="md"
+        >
+          <DialogTitle>
+            Branch Devices
+          </DialogTitle>
+          <DialogContent>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="subtitle1">
+                  {devicesBranch?.name || devicesBranch?.location || "Branch"}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "#64748b" }}>
+                  Active devices: {devicesMeta.active_count || 0}
+                </Typography>
+              </Box>
+              {devicesStatus === "loading" && <LoadingSpinner />}
+              {devicesStatus === "failed" && devicesError && <ErrorState message={devicesError} />}
+              {deviceRemoveError && <ErrorState message={deviceRemoveError} />}
+              {devicesStatus === "succeeded" && branchDevices.length === 0 && (
+                <Typography variant="body2" sx={{ color: "#64748b" }}>
+                  No devices are attached to this branch.
+                </Typography>
+              )}
+              {devicesStatus === "succeeded" && branchDevices.length > 0 && (
+                <DataTable columns={deviceColumns} rows={branchDevices} />
+              )}
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDevicesDialogOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
         <Dialog
