@@ -1,0 +1,43 @@
+name: V1 Admin Dashboard Runtime Smoke
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  admin-runtime-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+      - name: Production build
+        run: npm run build
+      - name: Start real Vite preview and verify HTTP output
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4174 > /tmp/admin-preview.log 2>&1 &
+          pid=$!
+          cleanup() { kill "$pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ -o /tmp/admin-home.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4174/ -o /tmp/admin-home.html
+          grep -q '<div id="root"></div>' /tmp/admin-home.html
+          asset=$(grep -oE '/assets/index-[^" ]+\.js' /tmp/admin-home.html | head -1)
+          test -n "$asset"
+          curl -fsS "http://127.0.0.1:4174${asset}" -o /tmp/admin-app.js
+          test -s /tmp/admin-app.js
+          echo '--- HTTP root evidence ---'
+          head -30 /tmp/admin-home.html
+          echo '--- Preview log evidence ---'
+          cat /tmp/admin-preview.log
