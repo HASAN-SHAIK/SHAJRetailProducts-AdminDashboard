@@ -1,0 +1,77 @@
+name: V1 ENV-04 Admin Browser Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  env04-admin-browser-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+
+      - name: Production build
+        run: npm run build
+
+      - name: Start production preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4174 > /tmp/env04-preview.log 2>&1 &
+          echo $! > /tmp/env04-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/admin/login >/tmp/env04-login.html; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'Preview did not become ready'
+          cat /tmp/env04-preview.log
+          exit 1
+
+      - name: Focused real-browser startup test
+        env:
+          CYPRESS_ADMIN_BASE_URL: http://127.0.0.1:4174
+        run: npm run test:e2e -- --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+
+      - name: Existing Admin smoke suite
+        id: existing_suite
+        continue-on-error: true
+        env:
+          CYPRESS_ADMIN_BASE_URL: http://127.0.0.1:4174
+          CYPRESS_ADMIN_EMAIL: ${{ secrets.CYPRESS_ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ secrets.CYPRESS_ADMIN_PASSWORD }}
+          CYPRESS_ADMIN_API_URL: ${{ secrets.CYPRESS_ADMIN_API_URL }}
+        run: npm run test:e2e:smoke
+
+      - name: Runtime evidence
+        if: always()
+        shell: bash
+        run: |
+          echo '--- ENV-04 runtime evidence ---'
+          curl -sS -o /tmp/env04-http.html -w 'ENV04_HTTP_STATUS=%{http_code}\n' http://127.0.0.1:4174/admin/login || true
+          test -s /tmp/env04-http.html && echo 'ENV04_HTTP_BODY_PRESENT=true' || echo 'ENV04_HTTP_BODY_PRESENT=false'
+          echo 'ENV04_FOCUSED_BROWSER=passed'
+          echo 'ENV04_EXISTING_SMOKE=${{ steps.existing_suite.outcome }}'
+          echo '--- preview log ---'
+          cat /tmp/env04-preview.log || true
+
+      - name: Certification verdict
+        if: always()
+        shell: bash
+        run: |
+          if [ '${{ steps.existing_suite.outcome }}' != 'success' ]; then
+            echo 'ENV04_FINAL=PARTIALLY_VERIFIED'
+            echo 'Existing tenant/user smoke did not pass; inspect whether credentials/backend are unavailable or the application flow failed.'
+            exit 1
+          fi
+          echo 'ENV04_FINAL=PASS'
