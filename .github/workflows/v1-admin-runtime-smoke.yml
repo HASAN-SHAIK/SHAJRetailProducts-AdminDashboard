@@ -8,7 +8,7 @@ on:
 jobs:
   admin-runtime-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,7 +19,11 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Production build
         run: npm run build
-      - name: Start real Vite preview and verify HTTP output
+      - name: Install isolated browser runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start real Vite preview and run Chromium startup smoke
         shell: bash
         run: |
           set -euo pipefail
@@ -33,11 +37,28 @@ jobs:
           done
           curl -fsS http://127.0.0.1:4174/ -o /tmp/admin-home.html
           grep -q '<div id="root"></div>' /tmp/admin-home.html
-          asset=$(grep -oE '/assets/index-[^" ]+\.js' /tmp/admin-home.html | head -1)
-          test -n "$asset"
-          curl -fsS "http://127.0.0.1:4174${asset}" -o /tmp/admin-app.js
-          test -s /tmp/admin-app.js
-          echo '--- HTTP root evidence ---'
-          head -30 /tmp/admin-home.html
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const errors = [];
+          page.on('pageerror', e => errors.push(String(e)));
+          const response = await page.goto('http://127.0.0.1:4174/', { waitUntil: 'networkidle' });
+          await page.waitForURL('**/admin/login');
+          const titleVisible = await page.getByText('Admin Login', { exact: true }).isVisible();
+          const emailVisible = await page.getByLabel('Email').isVisible();
+          const passwordVisible = await page.getByLabel('Password').isVisible();
+          const loginVisible = await page.getByRole('button', { name: 'Login' }).isVisible();
+          console.log('ENV04_HTTP_STATUS=' + response.status());
+          console.log('ENV04_FINAL_URL=' + page.url());
+          console.log('ENV04_ADMIN_LOGIN_VISIBLE=' + titleVisible);
+          console.log('ENV04_EMAIL_VISIBLE=' + emailVisible);
+          console.log('ENV04_PASSWORD_VISIBLE=' + passwordVisible);
+          console.log('ENV04_LOGIN_BUTTON_VISIBLE=' + loginVisible);
+          console.log('ENV04_PAGE_ERRORS=' + JSON.stringify(errors));
+          if (response.status() !== 200 || !titleVisible || !emailVisible || !passwordVisible || !loginVisible || errors.length) process.exitCode = 1;
+          else console.log('ENV04_RUNTIME_STARTUP_PASS=true');
+          await browser.close();
+          NODE
           echo '--- Preview log evidence ---'
           cat /tmp/admin-preview.log
