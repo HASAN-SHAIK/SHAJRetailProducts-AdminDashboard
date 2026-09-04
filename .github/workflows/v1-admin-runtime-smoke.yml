@@ -19,11 +19,25 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Production build
         run: npm run build
+      - name: Focused automated ENV-04 startup acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4174 > /tmp/admin-focused-preview.log 2>&1 &
+          pid=$!
+          cleanup() { kill "$pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4174/ >/dev/null
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4174 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
       - name: Install isolated browser runtime
         run: |
           npm install --no-save --package-lock=false playwright@1.55.0
           npx playwright install --with-deps chromium
-      - name: Start real Vite preview and run Chromium startup smoke
+      - name: Start real Vite preview and run independent Chromium startup smoke
         shell: bash
         run: |
           set -euo pipefail
