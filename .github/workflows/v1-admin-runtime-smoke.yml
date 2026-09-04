@@ -23,9 +23,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm run preview -- --host 127.0.0.1 --port 4174 > /tmp/admin-focused-preview.log 2>&1 &
+          npm run preview -- --host 127.0.0.1 --port 4174 --strictPort > /tmp/admin-focused-preview.log 2>&1 &
           pid=$!
-          cleanup() { kill "$pid" 2>/dev/null || true; }
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+          }
           trap cleanup EXIT
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
@@ -41,15 +44,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm run preview -- --host 127.0.0.1 --port 4174 > /tmp/admin-preview.log 2>&1 &
+          npm run preview -- --host 127.0.0.1 --port 4176 --strictPort > /tmp/admin-preview.log 2>&1 &
           pid=$!
-          cleanup() { kill "$pid" 2>/dev/null || true; }
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+          }
           trap cleanup EXIT
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:4174/ -o /tmp/admin-home.html; then break; fi
+            if curl -fsS http://127.0.0.1:4176/ -o /tmp/admin-home.html; then break; fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:4174/ -o /tmp/admin-home.html
+          kill -0 "$pid"
+          curl -fsS http://127.0.0.1:4176/ -o /tmp/admin-home.html
           grep -q '<div id="root"></div>' /tmp/admin-home.html
           node --input-type=module <<'NODE'
           import { chromium } from 'playwright';
@@ -57,7 +64,7 @@ jobs:
           const page = await browser.newPage();
           const errors = [];
           page.on('pageerror', e => errors.push(String(e)));
-          const response = await page.goto('http://127.0.0.1:4174/', { waitUntil: 'networkidle' });
+          const response = await page.goto('http://127.0.0.1:4176/', { waitUntil: 'networkidle' });
           await page.waitForURL('**/admin/login');
           const titleVisible = await page.getByText('Admin Login', { exact: true }).isVisible();
           const emailVisible = await page.getByLabel('Email').isVisible();
@@ -74,5 +81,8 @@ jobs:
           else console.log('ENV04_RUNTIME_STARTUP_PASS=true');
           await browser.close();
           NODE
+          kill -0 "$pid"
+          grep -q '4176' /tmp/admin-preview.log
+          echo 'ENV04_PREVIEW_PROCESS_ALIVE=true'
           echo '--- Preview log evidence ---'
           cat /tmp/admin-preview.log
