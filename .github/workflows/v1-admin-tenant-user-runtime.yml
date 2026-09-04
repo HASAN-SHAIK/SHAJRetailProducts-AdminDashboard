@@ -1,0 +1,70 @@
+name: V1 Admin Tenant User Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  tenant-user-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+
+      - name: Production build
+        run: npm run build
+
+      - name: Start isolated production preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4181 --strictPort > /tmp/admin-tenant-user-preview.log 2>&1 &
+          echo $! > /tmp/admin-tenant-user-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4181/admin/login >/tmp/admin-tenant-user-login.html; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/admin-tenant-user-preview.log
+          exit 1
+
+      - name: Focused tenant and user registration browser test
+        env:
+          CYPRESS_ADMIN_BASE_URL: http://127.0.0.1:4181
+          CYPRESS_ADMIN_EMAIL: ${{ secrets.CYPRESS_ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ secrets.CYPRESS_ADMIN_PASSWORD }}
+          CYPRESS_ADMIN_API_URL: ${{ secrets.CYPRESS_ADMIN_API_URL }}
+        run: npx cypress run --browser electron --spec cypress/e2e/smoke/tenant-user-registration.smoke.cy.js
+
+      - name: Relevant Admin smoke suite
+        env:
+          CYPRESS_ADMIN_BASE_URL: http://127.0.0.1:4181
+          CYPRESS_ADMIN_EMAIL: ${{ secrets.CYPRESS_ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ secrets.CYPRESS_ADMIN_PASSWORD }}
+          CYPRESS_ADMIN_API_URL: ${{ secrets.CYPRESS_ADMIN_API_URL }}
+        run: npm run test:e2e:smoke
+
+      - name: Runtime evidence
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          echo '--- Admin tenant/user runtime evidence ---'
+          curl -sS -o /tmp/admin-tenant-user-http.html -w 'ADMIN_TENANT_USER_HTTP_STATUS=%{http_code}\n' http://127.0.0.1:4181/admin/login || true
+          test -s /tmp/admin-tenant-user-http.html && echo 'ADMIN_TENANT_USER_HTTP_BODY_PRESENT=true' || echo 'ADMIN_TENANT_USER_HTTP_BODY_PRESENT=false'
+          if [ -f /tmp/admin-tenant-user-preview.pid ] && kill -0 "$(cat /tmp/admin-tenant-user-preview.pid)" 2>/dev/null; then
+            echo 'ADMIN_TENANT_USER_PREVIEW_ALIVE=true'
+          else
+            echo 'ADMIN_TENANT_USER_PREVIEW_ALIVE=false'
+          fi
+          echo '--- preview log ---'
+          cat /tmp/admin-tenant-user-preview.log || true
