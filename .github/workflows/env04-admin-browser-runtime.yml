@@ -1,0 +1,123 @@
+name: ENV-04 Admin Dashboard Browser Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  env04-browser-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install isolated browser harness
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start production preview and exercise real browser runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4175 > /tmp/env04-preview.log 2>&1 &
+          preview_pid=$!
+          cleanup() { kill "$preview_pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4175/ -o /tmp/env04-home.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4175/ -o /tmp/env04-home.html
+
+          cat > ./env04-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const pageErrors = [];
+          const consoleErrors = [];
+          const failedRequests = [];
+
+          page.on('pageerror', err => pageErrors.push(String(err)));
+          page.on('console', msg => {
+            if (msg.type() === 'error') consoleErrors.push(msg.text());
+          });
+          page.on('requestfailed', req => failedRequests.push(`${req.method()} ${req.url()} :: ${req.failure()?.errorText || ''}`));
+
+          await page.route('**/*', async route => {
+            const req = route.request();
+            const url = new URL(req.url());
+            if (url.origin === 'http://127.0.0.1:4175') {
+              await route.continue();
+              return;
+            }
+            if (url.pathname.includes('/auth/login')) {
+              await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ message: 'isolated runtime: login not attempted' }) });
+              return;
+            }
+            if (url.pathname.startsWith('/platform') || url.pathname.startsWith('/api')) {
+              await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [], tenants: [] }) });
+              return;
+            }
+            await route.abort();
+          });
+
+          const response = await page.goto('http://127.0.0.1:4175/admin/login', { waitUntil: 'networkidle', timeout: 60000 });
+          await page.waitForSelector('#root', { timeout: 30000 });
+          const evidence = await page.evaluate(() => {
+            const root = document.querySelector('#root');
+            const email = document.querySelector('input[name="email"]');
+            const password = document.querySelector('input[name="password"]');
+            const buttons = [...document.querySelectorAll('button')].map(b => (b.textContent || '').trim());
+            return {
+              href: location.href,
+              rootExists: !!root,
+              rootChildren: root?.children.length || 0,
+              rootTextLength: (root?.textContent || '').trim().length,
+              emailExists: !!email,
+              passwordExists: !!password,
+              loginButtonExists: buttons.some(t => /^login$/i.test(t)),
+              bodySample: (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 240),
+            };
+          });
+
+          console.log(`ENV04_HTTP_STATUS=${response?.status()}`);
+          console.log(`ENV04_FINAL_URL=${evidence.href}`);
+          console.log(`ENV04_ROOT_EXISTS=${evidence.rootExists}`);
+          console.log(`ENV04_ROOT_CHILDREN=${evidence.rootChildren}`);
+          console.log(`ENV04_ROOT_TEXT_LENGTH=${evidence.rootTextLength}`);
+          console.log(`ENV04_EMAIL_INPUT=${evidence.emailExists}`);
+          console.log(`ENV04_PASSWORD_INPUT=${evidence.passwordExists}`);
+          console.log(`ENV04_LOGIN_BUTTON=${evidence.loginButtonExists}`);
+          console.log(`ENV04_BODY_SAMPLE=${evidence.bodySample}`);
+          console.log(`ENV04_PAGE_ERRORS=${JSON.stringify(pageErrors)}`);
+          console.log(`ENV04_CONSOLE_ERRORS=${JSON.stringify(consoleErrors)}`);
+          console.log(`ENV04_FAILED_REQUESTS=${JSON.stringify(failedRequests)}`);
+
+          if (response?.status() !== 200) throw new Error(`Admin preview returned ${response?.status()}`);
+          if (!evidence.rootExists || evidence.rootChildren < 1 || evidence.rootTextLength < 1) throw new Error('React root did not mount usable content');
+          if (!evidence.emailExists || !evidence.passwordExists || !evidence.loginButtonExists) throw new Error('Admin login surface did not render');
+          if (pageErrors.length) throw new Error(`Page errors observed: ${JSON.stringify(pageErrors)}`);
+
+          console.log('ENV04_BROWSER_RUNTIME_PASS=true');
+          await browser.close();
+          EOF
+
+          node ./env04-runtime.mjs
+          rm -f ./env04-runtime.mjs
+
+          echo '--- preview log ---'
+          cat /tmp/env04-preview.log
