@@ -8,7 +8,7 @@ on:
 jobs:
   admin-runtime-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,25 +19,70 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Production build
         run: npm run build
-      - name: Start real Vite preview and verify HTTP output
+      - name: Focused automated ENV-04 startup acceptance
         shell: bash
         run: |
           set -euo pipefail
-          npm run preview -- --host 127.0.0.1 --port 4174 > /tmp/admin-preview.log 2>&1 &
+          npm run preview -- --host 127.0.0.1 --port 4174 --strictPort > /tmp/admin-focused-preview.log 2>&1 &
           pid=$!
-          cleanup() { kill "$pid" 2>/dev/null || true; }
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+          }
           trap cleanup EXIT
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:4174/ -o /tmp/admin-home.html; then break; fi
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:4174/ -o /tmp/admin-home.html
+          curl -fsS http://127.0.0.1:4174/ >/dev/null
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4174 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+      - name: Install isolated browser runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start real Vite preview and run independent Chromium startup smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4176 --strictPort > /tmp/admin-preview.log 2>&1 &
+          pid=$!
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4176/ -o /tmp/admin-home.html; then break; fi
+            sleep 1
+          done
+          kill -0 "$pid"
+          curl -fsS http://127.0.0.1:4176/ -o /tmp/admin-home.html
           grep -q '<div id="root"></div>' /tmp/admin-home.html
-          asset=$(grep -oE '/assets/index-[^" ]+\.js' /tmp/admin-home.html | head -1)
-          test -n "$asset"
-          curl -fsS "http://127.0.0.1:4174${asset}" -o /tmp/admin-app.js
-          test -s /tmp/admin-app.js
-          echo '--- HTTP root evidence ---'
-          head -30 /tmp/admin-home.html
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const errors = [];
+          page.on('pageerror', e => errors.push(String(e)));
+          const response = await page.goto('http://127.0.0.1:4176/', { waitUntil: 'networkidle' });
+          await page.waitForURL('**/admin/login');
+          const titleVisible = await page.getByText('Admin Login', { exact: true }).isVisible();
+          const emailVisible = await page.getByLabel('Email').isVisible();
+          const passwordVisible = await page.getByLabel('Password').isVisible();
+          const loginVisible = await page.getByRole('button', { name: 'Login' }).isVisible();
+          console.log('ENV04_HTTP_STATUS=' + response.status());
+          console.log('ENV04_FINAL_URL=' + page.url());
+          console.log('ENV04_ADMIN_LOGIN_VISIBLE=' + titleVisible);
+          console.log('ENV04_EMAIL_VISIBLE=' + emailVisible);
+          console.log('ENV04_PASSWORD_VISIBLE=' + passwordVisible);
+          console.log('ENV04_LOGIN_BUTTON_VISIBLE=' + loginVisible);
+          console.log('ENV04_PAGE_ERRORS=' + JSON.stringify(errors));
+          if (response.status() !== 200 || !titleVisible || !emailVisible || !passwordVisible || !loginVisible || errors.length) process.exitCode = 1;
+          else console.log('ENV04_RUNTIME_STARTUP_PASS=true');
+          await browser.close();
+          NODE
+          kill -0 "$pid"
+          grep -q '4176' /tmp/admin-preview.log
+          echo 'ENV04_PREVIEW_PROCESS_ALIVE=true'
           echo '--- Preview log evidence ---'
           cat /tmp/admin-preview.log
