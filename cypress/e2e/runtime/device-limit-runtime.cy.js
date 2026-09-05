@@ -70,7 +70,11 @@ describe('Admin runtime - update branch device limit', () => {
       .invoke('attr', 'for')
       .then((fieldId) => {
         expect(fieldId).to.be.a('string').and.not.be.empty;
-        cy.get(`#${fieldId}`).clear().type('5');
+        cy.document().then((doc) => {
+          const field = doc.getElementById(fieldId);
+          expect(field, `input with id ${fieldId}`).to.exist;
+          cy.wrap(field).clear().type('5');
+        });
       });
     cy.contains('.MuiDialog-root button', /^save$/i).click();
 
