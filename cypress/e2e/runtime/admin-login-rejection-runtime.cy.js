@@ -17,19 +17,12 @@ describe('Admin runtime - rejected login containment', () => {
       },
     });
 
-    cy.contains('label', /^Email$/i)
-      .invoke('attr', 'for')
-      .then((id) => cy.get(`#${CSS.escape(id)}`).type('invalid.admin@example.com'));
-    cy.contains('label', /^Password$/i)
-      .invoke('attr', 'for')
-      .then((id) => cy.get(`#${CSS.escape(id)}`).type('WrongPassword123!'));
-
+    cy.get('input[name="email"]').type('invalid.admin@example.com');
+    cy.get('input[name="password"]').type('WrongPassword123!');
     cy.contains('button', /^Login$/i).click();
-    cy.wait('@rejectedLogin').its('response.statusCode').should('eq', 401);
 
-    cy.wrap(null).then(() => {
-      expect(loginCalls).to.eq(1);
-    });
+    cy.wait('@rejectedLogin').its('response.statusCode').should('eq', 401);
+    cy.wrap(null).then(() => expect(loginCalls).to.eq(1));
 
     cy.location('pathname').should('eq', '/admin/login');
     cy.contains(/Invalid credentials/i).should('be.visible');
