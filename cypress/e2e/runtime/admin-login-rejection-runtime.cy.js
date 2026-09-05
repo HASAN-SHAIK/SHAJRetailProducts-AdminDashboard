@@ -25,7 +25,6 @@ describe('Admin runtime - rejected login containment', () => {
     cy.wrap(null).then(() => expect(loginCalls).to.eq(1));
 
     cy.location('pathname').should('eq', '/admin/login');
-    cy.contains(/Invalid credentials/i).should('be.visible');
     cy.contains('button', /^Login$/i).should('be.visible').and('not.be.disabled');
 
     cy.window().then((win) => {
@@ -36,5 +35,8 @@ describe('Admin runtime - rejected login containment', () => {
     cy.visit('/admin/settings');
     cy.location('pathname').should('eq', '/admin/login');
     cy.contains('button', /^Login$/i).should('be.visible');
+
+    // A rejected credential attempt must explain the failure to the operator.
+    cy.contains(/Invalid credentials/i).should('be.visible');
   });
 });
