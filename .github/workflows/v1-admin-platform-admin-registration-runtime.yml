@@ -66,7 +66,7 @@ jobs:
         run: >-
           npx cypress run --browser electron
           --config baseUrl=http://127.0.0.1:4193
-          --spec cypress/e2e/runtime/platform-admin-registration-runtime.cy.js
+          --spec cypress/e2e/runtime/platform-admin-registration-runtime-v2.cy.js
 
       - name: Verify application process remained healthy
         if: always()
