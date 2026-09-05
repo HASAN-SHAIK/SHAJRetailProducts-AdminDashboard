@@ -1,0 +1,48 @@
+name: Runtime Source Artifact
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  package-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Record source metadata
+        shell: bash
+        run: |
+          printf 'repository=%s\nsha=%s\nref=%s\nrun_id=%s\n' \
+            "${GITHUB_REPOSITORY}" \
+            "${GITHUB_SHA}" \
+            "${GITHUB_REF}" \
+            "${GITHUB_RUN_ID}" > runtime-source-metadata.txt
+
+      - name: Package exact checked-out source
+        shell: bash
+        run: |
+          tar \
+            --exclude='./.git' \
+            --exclude='./runtime-source.tar.gz' \
+            -czf runtime-source.tar.gz .
+
+      - name: Upload runtime source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-source-${{ github.sha }}
+          path: |
+            runtime-source.tar.gz
+            runtime-source-metadata.txt
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
