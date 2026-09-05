@@ -54,13 +54,17 @@ jobs:
           cat /tmp/admin-preview.log
           exit 1
 
-      - name: Focused device-limit runtime plus relevant startup suite
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx cypress run --browser electron \
-            --config baseUrl=http://127.0.0.1:4186 \
-            --spec "cypress/e2e/runtime/env04-admin-startup.cy.js,cypress/e2e/runtime/device-limit-runtime.cy.js"
+      - name: Existing ENV-04 startup runtime
+        run: >-
+          npx cypress run --browser electron
+          --config baseUrl=http://127.0.0.1:4186
+          --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+
+      - name: Focused branch device-limit runtime
+        run: >-
+          npx cypress run --browser electron
+          --config baseUrl=http://127.0.0.1:4186
+          --spec cypress/e2e/runtime/device-limit-runtime.cy.js
 
       - name: Verify application remained healthy
         if: always()
