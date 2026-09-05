@@ -1,0 +1,67 @@
+name: V1 Admin Payments Filter Success Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  payments-filter-success-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Assert exact PR head
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EXACT_HEAD=$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+      - name: Production build
+        run: npm run build
+      - name: Existing ENV-04 automated/runtime acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4208 --strictPort > /tmp/admin-env04-payments-success-preview.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4208/admin/login >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4208/admin/login >/dev/null
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4208 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+      - name: Real payments filter success application runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4209 --strictPort > /tmp/admin-payments-filter-success-preview.log 2>&1 &
+          pid=$!
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4209/admin/payments >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4209/admin/payments >/dev/null
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4209 npx cypress run --browser electron --spec cypress/e2e/runtime/payments-filter-success-runtime.cy.js
+          kill -0 "$pid"
+          status=$(curl -sS -o /tmp/admin-payments-filter-success-route.html -w '%{http_code}' http://127.0.0.1:4209/admin/payments)
+          test "$status" = "200"
+          grep -q '<div id="root"></div>' /tmp/admin-payments-filter-success-route.html
+          echo 'ADMIN_PAYMENTS_FILTER_SUCCESS_RUNTIME_PASS=true'
+          echo 'ADMIN_PROCESS_ALIVE=true'
+          echo "ADMIN_PAYMENTS_ROUTE_HTTP_STATUS=$status"
+          cat /tmp/admin-payments-filter-success-preview.log
