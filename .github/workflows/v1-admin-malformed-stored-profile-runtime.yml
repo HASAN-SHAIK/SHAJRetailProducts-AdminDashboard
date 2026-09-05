@@ -1,0 +1,89 @@
+name: V1 Admin Malformed Stored Profile Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact head
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          echo "EXACT_HEAD=$(git rev-parse HEAD)"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Locked install
+        run: npm ci --no-audit --no-fund
+
+      - name: Production build
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:43141/platform
+        run: npm run build
+
+      - name: Start production preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4188 > /tmp/admin-malformed-profile-preview.log 2>&1 &
+          echo $! > /tmp/admin-malformed-profile-preview.pid
+          for i in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:4188/admin/login >/dev/null; then
+              echo "ADMIN_PREVIEW_READY=true"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/admin-malformed-profile-preview.log
+          exit 1
+
+      - name: Existing ENV-04 startup runtime
+        run: >-
+          npx cypress run --browser electron
+          --config baseUrl=http://127.0.0.1:4188
+          --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+
+      - name: Existing tenant/user registration smoke
+        run: >-
+          npx cypress run --browser electron
+          --config baseUrl=http://127.0.0.1:4188
+          --spec cypress/e2e/smoke/tenant-user-registration.smoke.cy.js
+
+      - name: Focused malformed-profile runtime
+        run: >-
+          npx cypress run --browser electron
+          --config baseUrl=http://127.0.0.1:4188
+          --spec cypress/e2e/runtime/malformed-stored-admin-profile-runtime.cy.js
+
+      - name: Verify application process remained healthy
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/admin-malformed-profile-preview.pid
+          kill -0 "$(cat /tmp/admin-malformed-profile-preview.pid)"
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:4188/admin/login)
+          test "$status" = "200"
+          echo "ADMIN_PROCESS_ALIVE=true"
+          echo "ADMIN_LOGIN_HTTP_STATUS=$status"
+          echo "--- preview log ---"
+          cat /tmp/admin-malformed-profile-preview.log
