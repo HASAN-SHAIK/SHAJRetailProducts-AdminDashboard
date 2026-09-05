@@ -65,17 +65,17 @@ describe('Admin runtime - update branch device limit', () => {
     cy.get('@branchRow').should('contain.text', '2');
     cy.get('@branchRow').within(() => cy.contains('button', /edit limit/i).click());
 
-    cy.contains('.MuiDialogTitle-root', /edit device limit/i).should('be.visible');
-    cy.contains('.MuiDialog-root label', /device limit/i)
+    cy.contains('.MuiDialogTitle-root', /edit branch device limit/i).should('be.visible');
+    cy.contains('.MuiDialog-root label', /^max devices allowed$/i)
       .invoke('attr', 'for')
       .then((fieldId) => {
         expect(fieldId).to.be.a('string').and.not.be.empty;
         cy.get(`#${fieldId}`).clear().type('5');
       });
-    cy.contains('.MuiDialog-root button', /save/i).click();
+    cy.contains('.MuiDialog-root button', /^save$/i).click();
 
     cy.wait('@updateLimit');
-    cy.contains('.MuiDialogTitle-root', /edit device limit/i).should('not.exist');
+    cy.contains('.MuiDialogTitle-root', /edit branch device limit/i).should('not.exist');
     cy.contains('tr', 'Main Branch').should('contain.text', '5');
   });
 });
