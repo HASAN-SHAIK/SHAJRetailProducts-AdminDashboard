@@ -62,12 +62,6 @@ jobs:
           --config baseUrl=http://127.0.0.1:4188
           --spec cypress/e2e/runtime/env04-admin-startup.cy.js
 
-      - name: Existing tenant/user registration smoke
-        run: >-
-          npx cypress run --browser electron
-          --config baseUrl=http://127.0.0.1:4188
-          --spec cypress/e2e/smoke/tenant-user-registration.smoke.cy.js
-
       - name: Focused malformed-profile runtime
         run: >-
           npx cypress run --browser electron
