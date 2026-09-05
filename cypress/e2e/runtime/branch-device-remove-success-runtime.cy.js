@@ -102,7 +102,7 @@ describe('Admin runtime - branch device removal success', () => {
     cy.wait('@devices');
 
     cy.contains(/active devices:\s*0/i).should('be.visible');
-    cy.contains('tr', 'Counter POS').should('contain.text', 'Inactive');
+    cy.contains('tr', 'Counter POS').should('contain.text', 'Removed');
     cy.contains('tr', 'Counter POS').within(() => {
       cy.contains('button', /^remove$/i).should('not.exist');
     });
