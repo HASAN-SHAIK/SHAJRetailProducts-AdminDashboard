@@ -4,18 +4,13 @@ describe('Cycle A Plans fetch failure runtime', () => {
 
   beforeEach(() => {
     plansReads = 0;
-    cy.intercept({ method: 'GET', url: '**' }, (req) => {
-      const url = new URL(req.url);
-      if (url.pathname === '/plans') {
-        plansReads += 1;
-        expect(req.headers.authorization).to.eq(`Bearer ${token}`);
-        req.reply({
-          statusCode: 500,
-          body: { message: 'Plan service unavailable' }
-        });
-        return;
-      }
-      req.continue();
+    cy.intercept({ method: 'GET', pathname: '/plans' }, (req) => {
+      plansReads += 1;
+      expect(req.headers.authorization).to.eq(`Bearer ${token}`);
+      req.reply({
+        statusCode: 500,
+        body: { message: 'Plan service unavailable' }
+      });
     }).as('plansBoundary');
   });
 
