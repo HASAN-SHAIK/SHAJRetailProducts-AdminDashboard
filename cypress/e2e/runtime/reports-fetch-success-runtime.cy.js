@@ -54,8 +54,8 @@ describe("V1 Admin reports fetch success runtime", () => {
     cy.contains("Top 10 Tenants").should("be.visible");
 
     // Verify the rendered chart output itself without depending on Recharts'
-    // generated axis-wrapper class names. Each chart must have real geometry and
-    // its SVG text must contain the authoritative server values.
+    // generated wrapper ids. Each chart must have real geometry and its SVG
+    // labels must contain the authoritative server values.
     cy.get(".recharts-wrapper").should("have.length.at.least", 2);
 
     cy.get(".recharts-wrapper")
@@ -76,10 +76,17 @@ describe("V1 Admin reports fetch success runtime", () => {
       .eq(1)
       .within(() => {
         cy.get(".recharts-bar-rectangle").should("have.length.at.least", 2);
-        cy.get("svg").should(($svg) => {
-          const text = $svg.text();
-          expect(text).to.contain("Cycle A Market");
-          expect(text).to.contain("Cycle A Pharmacy");
+        cy.get('.recharts-bar-rectangle path[name="Cycle A Market"]').should("exist");
+        cy.get('.recharts-bar-rectangle path[name="Cycle A Pharmacy"]').should("exist");
+        cy.get(".recharts-cartesian-axis-tick-value").should(($ticks) => {
+          const labels = [...$ticks].map((tick) =>
+            [...tick.querySelectorAll("tspan")]
+              .map((part) => part.textContent.trim())
+              .filter(Boolean)
+              .join(" ")
+          );
+          expect(labels).to.include("Cycle A Market");
+          expect(labels).to.include("Cycle A Pharmacy");
         });
       });
 
