@@ -1,4 +1,20 @@
 describe("V1 Admin reports fetch success runtime", () => {
+  afterEach(() => {
+    cy.document().then((doc) => {
+      const wrappers = [...doc.querySelectorAll(".recharts-wrapper")].map((wrapper, index) => ({
+        index,
+        text: wrapper.textContent,
+        html: wrapper.outerHTML
+      }));
+      cy.writeFile("cypress/evidence/reports-fetch-success-dom.json", {
+        pathname: doc.location.pathname,
+        bodyText: doc.body?.innerText || "",
+        wrapperCount: wrappers.length,
+        wrappers
+      });
+    });
+  });
+
   it("renders authoritative report series and tenant data without losing session or route", () => {
     let requestCount = 0;
 
