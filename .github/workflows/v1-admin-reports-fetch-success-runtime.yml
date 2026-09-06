@@ -41,9 +41,10 @@ jobs:
           curl -fsS http://127.0.0.1:4212/admin/login >/dev/null
           CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4212 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
       - name: Real reports success application runtime
+        id: reports_runtime
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           npm run preview -- --host 127.0.0.1 --port 4213 --strictPort > /tmp/admin-reports-success-preview.log 2>&1 &
           pid=$!
           cleanup() {
@@ -55,13 +56,26 @@ jobs:
             if curl -fsS http://127.0.0.1:4213/admin/reports >/dev/null; then break; fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:4213/admin/reports >/dev/null
+          curl -fsS http://127.0.0.1:4213/admin/reports >/dev/null || exit 1
           CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4213 npx cypress run --browser electron --spec cypress/e2e/runtime/reports-fetch-success-runtime.cy.js
-          kill -0 "$pid"
+          runtime_status=$?
+          kill -0 "$pid" || exit 1
           status=$(curl -sS -o /tmp/admin-reports-success-route.html -w '%{http_code}' http://127.0.0.1:4213/admin/reports)
-          test "$status" = "200"
-          grep -q '<div id="root"></div>' /tmp/admin-reports-success-route.html
-          echo 'ADMIN_REPORTS_FETCH_SUCCESS_RUNTIME_PASS=true'
+          test "$status" = "200" || exit 1
+          grep -q '<div id="root"></div>' /tmp/admin-reports-success-route.html || exit 1
+          echo "ADMIN_REPORTS_CYPRESS_EXIT=$runtime_status"
           echo 'ADMIN_PROCESS_ALIVE=true'
           echo "ADMIN_REPORTS_ROUTE_HTTP_STATUS=$status"
           cat /tmp/admin-reports-success-preview.log
+          exit "$runtime_status"
+      - name: Upload reports runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cycle-a-reports-success-evidence
+          if-no-files-found: warn
+          path: |
+            cypress/evidence/reports-fetch-success-dom.json
+            cypress/screenshots/**
+            /tmp/admin-reports-success-preview.log
+            /tmp/admin-reports-success-route.html
