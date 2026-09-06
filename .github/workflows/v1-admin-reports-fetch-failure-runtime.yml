@@ -1,0 +1,67 @@
+name: V1 Admin Reports Fetch Failure Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  reports-fetch-failure-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Assert exact PR head
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EXACT_HEAD=$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+      - name: Production build
+        run: npm run build
+      - name: Existing ENV-04 automated/runtime acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4210 --strictPort > /tmp/admin-env04-reports-failure-preview.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4210/admin/login >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4210/admin/login >/dev/null
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4210 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+      - name: Real reports failure application runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4211 --strictPort > /tmp/admin-reports-failure-preview.log 2>&1 &
+          pid=$!
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4211/admin/reports >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4211/admin/reports >/dev/null
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4211 npx cypress run --browser electron --spec cypress/e2e/runtime/reports-fetch-failure-runtime.cy.js
+          kill -0 "$pid"
+          status=$(curl -sS -o /tmp/admin-reports-failure-route.html -w '%{http_code}' http://127.0.0.1:4211/admin/reports)
+          test "$status" = "200"
+          grep -q '<div id="root"></div>' /tmp/admin-reports-failure-route.html
+          echo 'ADMIN_REPORTS_FETCH_FAILURE_RUNTIME_PASS=true'
+          echo 'ADMIN_PROCESS_ALIVE=true'
+          echo "ADMIN_REPORTS_ROUTE_HTTP_STATUS=$status"
+          cat /tmp/admin-reports-failure-preview.log
