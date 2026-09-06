@@ -37,18 +37,35 @@ describe("V1 Admin reports fetch success runtime", () => {
     cy.contains("Revenue Over 6 Months").should("be.visible");
     cy.contains("Top 10 Tenants").should("be.visible");
 
-    // Recharts categorical charts render through generic `.recharts-wrapper`
-    // containers; assert real geometry plus authoritative SVG tick contents.
+    // Verify the rendered chart output itself without depending on Recharts'
+    // generated axis-wrapper class names. Each chart must have real geometry and
+    // its SVG text must contain the authoritative server values.
     cy.get(".recharts-wrapper").should("have.length.at.least", 2);
-    cy.get(".recharts-line-curve").should("exist");
-    cy.get(".recharts-xAxis .recharts-cartesian-axis-tick-value")
-      .then(($ticks) => [...$ticks].map((tick) => tick.textContent?.trim()))
-      .should("include.members", ["Jan 2026", "Feb 2026"]);
 
-    cy.get(".recharts-bar-rectangle").should("have.length.at.least", 2);
-    cy.get(".recharts-yAxis .recharts-cartesian-axis-tick-value")
-      .then(($ticks) => [...$ticks].map((tick) => tick.textContent?.trim()))
-      .should("include.members", ["Cycle A Market", "Cycle A Pharmacy"]);
+    cy.get(".recharts-wrapper")
+      .eq(0)
+      .within(() => {
+        cy.get(".recharts-line-curve")
+          .should("exist")
+          .and("have.attr", "d")
+          .and("not.be.empty");
+        cy.get("svg").should(($svg) => {
+          const text = $svg.text();
+          expect(text).to.contain("Jan 2026");
+          expect(text).to.contain("Feb 2026");
+        });
+      });
+
+    cy.get(".recharts-wrapper")
+      .eq(1)
+      .within(() => {
+        cy.get(".recharts-bar-rectangle").should("have.length.at.least", 2);
+        cy.get("svg").should(($svg) => {
+          const text = $svg.text();
+          expect(text).to.contain("Cycle A Market");
+          expect(text).to.contain("Cycle A Pharmacy");
+        });
+      });
 
     cy.location("pathname").should("eq", "/admin/reports");
 
