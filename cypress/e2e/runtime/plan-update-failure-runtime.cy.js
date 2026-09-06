@@ -58,7 +58,7 @@ describe("V1 Admin plan update failure runtime", () => {
     cy.contains("button", "Edit").click();
     cy.get('[role="dialog"]').should("be.visible").within(() => {
       cy.contains("Edit Plan").should("be.visible");
-      cy.get('input[type="number"]').eq(0).clear().type("699");
+      cy.get('input[type="number"]').eq(0).type("{selectall}699");
       cy.contains("button", "Save Changes").click();
     });
 
