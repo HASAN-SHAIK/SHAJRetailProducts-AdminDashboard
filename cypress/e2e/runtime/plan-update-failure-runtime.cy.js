@@ -3,7 +3,7 @@ describe("V1 Admin plan update failure runtime", () => {
     let plansReads = 0;
     let updateWrites = 0;
 
-    cy.intercept("GET", "**/plans*", (req) => {
+    cy.intercept({ method: "GET", pathname: "/plans" }, (req) => {
       plansReads += 1;
       expect(req.headers.authorization).to.eq("Bearer cycle-a-plan-failure-token");
       req.reply({
@@ -25,7 +25,7 @@ describe("V1 Admin plan update failure runtime", () => {
       });
     }).as("plansRead");
 
-    cy.intercept("PATCH", "**/plans/1", (req) => {
+    cy.intercept({ method: "PATCH", pathname: "/plans/1" }, (req) => {
       updateWrites += 1;
       expect(req.headers.authorization).to.eq("Bearer cycle-a-plan-failure-token");
       expect(req.body).to.deep.eq({
