@@ -1,0 +1,64 @@
+describe('Cycle A Support Case status update failure runtime', () => {
+  const sessionValue = 'cycle-a-support-status-failure-session';
+  let detailReads = 0;
+  let statusWrites = 0;
+
+  beforeEach(() => {
+    detailReads = 0;
+    statusWrites = 0;
+    cy.intercept({ method: 'GET', pathname: '/support/cases/42' }, (req) => {
+      detailReads += 1;
+      expect(req.headers.authorization).to.eq(`Bearer ${sessionValue}`);
+      req.reply({ statusCode: 200, body: { id: 42, title: 'Receipt printer intermittently offline', tenant_name: 'Cycle A Market', category: 'printer', assigned_to: 'admin-7', assigned_to_name: 'Asha Admin', status: 'open', priority: 'high', description: 'Printer disconnects during peak billing.', created_at: '2026-09-06T10:00:00.000Z', updated_at: '2026-09-06T10:05:00.000Z', messages: [{ id: 1, author: 'Store Manager', role: 'tenant', body: 'Issue reproduced twice.', created_at: '2026-09-06T10:02:00.000Z' }] } });
+    }).as('supportCaseDetailBoundary');
+    cy.intercept({ method: 'PATCH', pathname: '/support/cases/42/status' }, (req) => {
+      statusWrites += 1;
+      expect(req.headers.authorization).to.eq(`Bearer ${sessionValue}`);
+      expect(req.body).to.deep.eq({ status: 'resolved' });
+      req.reply({ statusCode: 500, body: { message: 'Support status update unavailable' } });
+    }).as('supportCaseStatusBoundary');
+  });
+
+  it('surfaces the authoritative status error and preserves retryable authoritative state', () => {
+    cy.visit('/admin/support-cases/42', { onBeforeLoad(win) {
+      win.localStorage.setItem('shaj_admin_token', sessionValue);
+      win.localStorage.setItem('shaj_admin_profile', JSON.stringify({ id: 1, name: 'Cycle A Admin', email: 'cycle-a@example.com', role: 'platform_admin' }));
+    }});
+    cy.wait('@supportCaseDetailBoundary').its('response.statusCode').should('eq', 200);
+    cy.contains('Receipt printer intermittently offline').should('be.visible');
+    cy.contains('open').should('be.visible');
+    cy.contains('high').should('be.visible');
+    cy.contains('Issue reproduced twice.').should('be.visible');
+
+    cy.contains('button', 'Change Status').click();
+    cy.get('[role="dialog"]').within(() => {
+      cy.contains('Change Status').should('be.visible');
+      cy.get('[role="combobox"]').click();
+    });
+    cy.get('[role="option"]').contains('resolved').click();
+    cy.get('[role="dialog"]').contains('button', 'Save').click();
+
+    cy.wait('@supportCaseStatusBoundary').its('response.statusCode').should('eq', 500);
+    cy.contains('Support status update unavailable').should('be.visible');
+    cy.contains('Status updated').should('not.exist');
+    cy.get('[role="dialog"]').should('be.visible').within(() => {
+      cy.contains('Change Status').should('be.visible');
+      cy.get('[role="combobox"]').should('contain.text', 'resolved');
+      cy.contains('button', 'Save').should('be.enabled');
+    });
+    cy.contains('open').should('be.visible');
+    cy.contains('resolved').should('exist');
+    cy.contains('Receipt printer intermittently offline').should('be.visible');
+    cy.contains('high').should('be.visible');
+    cy.contains('Issue reproduced twice.').should('be.visible');
+    cy.location('pathname').should('eq', '/admin/support-cases/42');
+    cy.window().then((win) => {
+      expect(win.localStorage.getItem('shaj_admin_token')).to.eq(sessionValue);
+      expect(win.localStorage.getItem('shaj_admin_profile')).to.not.be.null;
+    });
+    cy.then(() => {
+      expect(detailReads).to.eq(1);
+      expect(statusWrites).to.eq(1);
+    });
+  });
+});
