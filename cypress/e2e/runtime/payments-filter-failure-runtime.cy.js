@@ -50,7 +50,7 @@ describe('Cycle A Payments filter failure runtime', () => {
     }).as('paymentsBoundary');
   });
 
-  it('preserves last-known authoritative payment rows when a filter refetch fails', () => {
+  it('surfaces the failed filter refetch without presenting stale rows as filtered results', () => {
     cy.visit('/admin/payments', {
       onBeforeLoad(win) {
         win.localStorage.setItem('shaj_admin_token', sessionValue);
@@ -72,12 +72,13 @@ describe('Cycle A Payments filter failure runtime', () => {
     cy.wait('@paymentsBoundary').its('response.statusCode').should('eq', 500);
 
     cy.contains('Payment filter service unavailable').should('be.visible');
-    cy.contains('Cycle A Basic Shop').should('be.visible');
-    cy.contains('Cycle A Pro Shop').should('be.visible');
+    cy.contains('Cycle A Basic Shop').should('not.exist');
+    cy.contains('Cycle A Pro Shop').should('not.exist');
     cy.contains('button', 'Export CSV').should('be.visible').and('be.enabled');
     cy.contains('From').should('be.visible');
     cy.contains('To').should('be.visible');
     cy.contains('Plan').should('be.visible');
+    cy.get('[role="combobox"]').last().should('contain.text', 'Pro');
     cy.location('pathname').should('eq', '/admin/payments');
 
     cy.window().then((win) => {
