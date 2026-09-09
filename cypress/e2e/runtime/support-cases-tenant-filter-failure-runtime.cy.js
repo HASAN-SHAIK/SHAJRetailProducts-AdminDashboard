@@ -54,7 +54,15 @@ describe('Cycle A Support Cases tenant-filter failure runtime', () => {
     cy.contains('Cycle A Pharmacy').should('be.visible');
     cy.contains('Scanner connection issue').should('be.visible');
 
-    cy.get('input[name="tenant"]').type('Cycle A Supermarket');
+    cy.get('input[name="tenant"]').then(($input) => {
+      const input = $input[0];
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        input.ownerDocument.defaultView.HTMLInputElement.prototype,
+        'value'
+      ).set;
+      valueSetter.call(input, 'Cycle A Supermarket');
+      input.dispatchEvent(new input.ownerDocument.defaultView.Event('input', { bubbles: true }));
+    });
     cy.wait('@supportCasesBoundary').its('response.statusCode').should('eq', 500);
 
     cy.contains('Support cases tenant filter unavailable').should('be.visible');
