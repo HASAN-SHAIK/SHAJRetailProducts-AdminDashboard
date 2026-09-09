@@ -1,0 +1,71 @@
+name: V1 Admin Payments To-Date Failure Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  payments-to-date-failure-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git rev-parse HEAD)
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          echo "EXACT_HEAD=$actual"
+          test "$actual" = "$expected"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+      - name: Production build
+        run: npm run build
+      - name: Existing ENV-04 runtime acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4315 --strictPort > /tmp/admin-env04-payments-to-date-failure.log 2>&1 &
+          pid=$!
+          cleanup() { kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4315/admin/login >/dev/null; then break; fi
+            sleep 1
+          done
+          kill -0 "$pid"
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4315 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+      - name: Real Payments To-date failure application runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4316 --strictPort > /tmp/admin-payments-to-date-failure.log 2>&1 &
+          pid=$!
+          cleanup() { kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4316/admin/payments >/dev/null; then break; fi
+            sleep 1
+          done
+          kill -0 "$pid"
+          set +e
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4316 npx cypress run --browser electron --spec cypress/e2e/runtime/payments-to-date-failure-runtime.cy.js
+          test_status=$?
+          set -e
+          kill -0 "$pid"
+          status=$(curl -sS -o /tmp/admin-payments-to-date-failure-after.html -w '%{http_code}' http://127.0.0.1:4316/admin/payments)
+          echo "ADMIN_PAYMENTS_TO_DATE_FAILURE_ROUTE_HTTP_STATUS=$status"
+          test "$status" = '200'
+          grep -q '<div id="root"></div>' /tmp/admin-payments-to-date-failure-after.html
+          echo 'ADMIN_PAYMENTS_TO_DATE_FAILURE_RUNTIME_COMPLETED=true'
+          cat /tmp/admin-payments-to-date-failure.log
+          exit "$test_status"
