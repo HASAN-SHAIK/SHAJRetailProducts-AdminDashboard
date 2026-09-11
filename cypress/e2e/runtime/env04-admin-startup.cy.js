@@ -1,3 +1,5 @@
+import './tenant-branch-partial-limit-response-runtime.cy.js';
+
 describe('ENV-04 AdminDashboard startup', () => {
   it('redirects unauthenticated root to the real admin login UI', () => {
     cy.visit('/');
