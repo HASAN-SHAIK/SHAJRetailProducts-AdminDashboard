@@ -87,7 +87,12 @@ describe('Cycle A Support Cases refresh preserves all active filters runtime', (
     cy.get('[role="option"]').contains(/^urgent$/).click();
     cy.wait('@supportCasesBoundary').its('response.statusCode').should('eq', 200);
 
-    cy.get('input[name="tenant"]').clear().type('Cycle A Supermarket');
+    cy.get('input[name="tenant"]').then(($input) => {
+      const input = $input[0];
+      const valueSetter = Object.getOwnPropertyDescriptor(input.ownerDocument.defaultView.HTMLInputElement.prototype, 'value').set;
+      valueSetter.call(input, 'Cycle A Supermarket');
+      input.dispatchEvent(new input.ownerDocument.defaultView.Event('input', { bubbles: true }));
+    });
     cy.wait('@supportCasesBoundary').its('response.statusCode').should('eq', 200);
     cy.contains('Open urgent supermarket hardware case').should('be.visible');
 
