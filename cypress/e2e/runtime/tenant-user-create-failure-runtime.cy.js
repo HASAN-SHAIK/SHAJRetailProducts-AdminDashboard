@@ -24,11 +24,11 @@ const retainedUser = {
 };
 
 const inputByLabel = (label) =>
-  cy.contains('label', new RegExp(`^${label}$`, 'i'))
+  cy.contains('.MuiDialog-root label', new RegExp(`^${label}$`, 'i'))
     .invoke('attr', 'for')
     .then((fieldId) => {
-      if (!fieldId) throw new Error(`No input id found for label "${label}"`);
-      return cy.get(`[id="${fieldId}"]`);
+      if (!fieldId) throw new Error(`No dialog input id found for label "${label}"`);
+      return cy.get(`.MuiDialog-root [id="${fieldId}"]`);
     });
 
 const fillByLabel = (label, value) => {
