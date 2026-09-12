@@ -23,13 +23,16 @@ const retainedUser = {
   created_at: '2026-09-02T00:00:00Z'
 };
 
-const fillByLabel = (label, value) => {
+const inputByLabel = (label) =>
   cy.contains('label', new RegExp(`^${label}$`, 'i'))
     .invoke('attr', 'for')
     .then((fieldId) => {
       if (!fieldId) throw new Error(`No input id found for label "${label}"`);
-      cy.get(`#${fieldId}`).clear().type(String(value));
+      return cy.get(`[id="${fieldId}"]`);
     });
+
+const fillByLabel = (label, value) => {
+  inputByLabel(label).clear().type(String(value));
 };
 
 describe('Admin runtime - tenant user create failure containment', () => {
@@ -92,12 +95,8 @@ describe('Admin runtime - tenant user create failure containment', () => {
 
     cy.contains('User already registered for tenant').should('be.visible');
     cy.contains('h2, .MuiDialogTitle-root', /register tenant user/i).should('be.visible');
-    cy.contains('label', /^Name$/i).invoke('attr', 'for').then((id) => {
-      cy.get(`#${id}`).should('have.value', 'Cycle A Duplicate Cashier');
-    });
-    cy.contains('label', /^Email$/i).invoke('attr', 'for').then((id) => {
-      cy.get(`#${id}`).should('have.value', 'manager@example.com');
-    });
+    inputByLabel('Name').should('have.value', 'Cycle A Duplicate Cashier');
+    inputByLabel('Email').should('have.value', 'manager@example.com');
     cy.contains('tr', 'Cycle A Manager')
       .should('contain.text', 'manager@example.com')
       .and('contain.text', 'manager');
