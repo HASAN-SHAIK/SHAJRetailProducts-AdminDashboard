@@ -1,0 +1,85 @@
+name: V1 Admin Login Rejected Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  rejected-login-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "EXACT_HEAD=$actual"
+          test "$actual" = "$expected"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+
+      - name: Production build
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:4591/api
+        run: npm run build
+
+      - name: Start production preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4510 --strictPort > /tmp/admin-login-preview.log 2>&1 &
+          echo $! > /tmp/admin-login-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4510/admin/login >/tmp/admin-login-page.html; then
+              echo 'ADMIN_LOGIN_PREVIEW_READY=true'
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/admin-login-preview.log
+          exit 1
+
+      - name: Existing ENV-04 browser runtime
+        run: npx cypress run --browser electron --config baseUrl=http://127.0.0.1:4510 --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+
+      - name: Focused rejected-login browser runtime
+        id: focused
+        continue-on-error: true
+        run: npx cypress run --browser electron --config baseUrl=http://127.0.0.1:4510 --spec cypress/e2e/runtime/admin-login-rejected-runtime.cy.js
+
+      - name: Post-runtime health
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          pid="$(cat /tmp/admin-login-preview.pid)"
+          kill -0 "$pid"
+          status="$(curl -sS -o /tmp/admin-login-post.html -w '%{http_code}' http://127.0.0.1:4510/admin/login)"
+          echo "ADMIN_LOGIN_PROCESS_ALIVE=true"
+          echo "ADMIN_LOGIN_POST_RUNTIME_HTTP=$status"
+          test "$status" = '200'
+
+      - name: Certification verdict
+        if: always()
+        shell: bash
+        run: |
+          echo "ADMIN_LOGIN_REJECTED_FOCUSED_OUTCOME=${{ steps.focused.outcome }}"
+          if [ '${{ steps.focused.outcome }}' != 'success' ]; then
+            echo 'ADMIN_LOGIN_REJECTED_FINAL=FAIL'
+            exit 1
+          fi
+          echo 'ADMIN_LOGIN_REJECTED_FINAL=PASS'
