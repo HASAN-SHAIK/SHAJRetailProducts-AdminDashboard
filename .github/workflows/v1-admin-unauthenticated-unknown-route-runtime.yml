@@ -1,0 +1,54 @@
+name: V1 Admin Unauthenticated Unknown Route Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  unauthenticated-unknown-route-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git rev-parse HEAD)
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          echo "EXACT_HEAD=$actual"
+          test "$actual" = "$expected"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+      - name: Production build
+        run: VITE_API_BASE_URL=http://127.0.0.1:43140/platform npm run build
+      - name: Real AdminDashboard application runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4514 --strictPort > /tmp/admin-unauth-unknown.log 2>&1 &
+          pid=$!
+          cleanup() { kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4514/admin/login >/dev/null; then break; fi
+            sleep 1
+          done
+          kill -0 "$pid"
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4514 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4514 npx cypress run --browser electron --spec cypress/e2e/runtime/admin-unauthenticated-unknown-route-runtime.cy.js
+          kill -0 "$pid"
+          status=$(curl -sS -o /tmp/admin-login-after.html -w '%{http_code}' http://127.0.0.1:4514/admin/login)
+          echo "ADMIN_LOGIN_ROUTE_HTTP_STATUS=$status"
+          test "$status" = '200'
+          grep -q '<div id="root"></div>' /tmp/admin-login-after.html
+          echo 'ADMIN_UNAUTHENTICATED_UNKNOWN_ROUTE_RUNTIME_PASS=true'
+          cat /tmp/admin-unauth-unknown.log
