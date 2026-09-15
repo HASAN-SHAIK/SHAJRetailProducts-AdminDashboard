@@ -19,7 +19,7 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Production build
         run: npm run build
-      - name: Focused automated ENV-04 startup acceptance
+      - name: Focused automated ENV-04 and login network-failure acceptance
         shell: bash
         run: |
           set -euo pipefail
@@ -36,6 +36,10 @@ jobs:
           done
           curl -fsS http://127.0.0.1:4174/ >/dev/null
           CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4174 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4174 npx cypress run --browser electron --spec cypress/e2e/runtime/admin-login-network-failure-runtime.cy.js
+          kill -0 "$pid"
+          curl -fsS http://127.0.0.1:4174/admin/login >/dev/null
+          echo 'ADMIN_LOGIN_NETWORK_RUNTIME_PASS=true'
       - name: Install isolated browser runtime
         run: |
           npm install --no-save --package-lock=false playwright@1.55.0
