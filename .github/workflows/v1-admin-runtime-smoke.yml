@@ -18,6 +18,8 @@ jobs:
       - name: Locked dependency install
         run: npm ci --no-audit --no-fund
       - name: Production build
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:4593/api
         run: npm run build
       - name: Focused automated ENV-04 and login network-failure acceptance
         shell: bash
@@ -35,8 +37,8 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:4174/ >/dev/null
-          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4174 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
-          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4174 npx cypress run --browser electron --spec cypress/e2e/runtime/admin-login-network-failure-runtime.cy.js
+          npx cypress run --browser electron --config baseUrl=http://127.0.0.1:4174 --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+          npx cypress run --browser electron --config baseUrl=http://127.0.0.1:4174 --spec cypress/e2e/runtime/admin-login-network-failure-runtime.cy.js
           kill -0 "$pid"
           curl -fsS http://127.0.0.1:4174/admin/login >/dev/null
           echo 'ADMIN_LOGIN_NETWORK_RUNTIME_PASS=true'
