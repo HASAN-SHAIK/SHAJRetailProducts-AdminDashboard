@@ -8,7 +8,7 @@ describe('V1 Admin login network failure runtime', () => {
         email: 'cycle-a-network@example.com',
         password: 'retry-password'
       });
-      req.destroy();
+      req.reply({ forceNetworkError: true });
     }).as('loginNetworkFailure');
 
     cy.visit('/admin/login', {
