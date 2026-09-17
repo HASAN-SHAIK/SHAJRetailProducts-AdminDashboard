@@ -1,0 +1,72 @@
+name: V1 Admin Login Rate Limit Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  login-rate-limit-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "EXACT_HEAD=$actual"
+          test "$actual" = "$expected"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Locked dependency install
+        run: npm ci --no-audit --no-fund
+
+      - name: Production build
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:4593/api
+        run: npm run build
+
+      - name: Start production preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4516 --strictPort > /tmp/admin-login-429-preview.log 2>&1 &
+          echo $! > /tmp/admin-login-429-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4516/admin/login >/tmp/admin-login-429-page.html; then
+              echo 'ADMIN_LOGIN_429_PREVIEW_READY=true'
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/admin-login-429-preview.log
+          exit 1
+
+      - name: Existing ENV-04 browser runtime
+        run: npx cypress run --browser electron --config baseUrl=http://127.0.0.1:4516 --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+
+      - name: Focused login-rate-limit browser runtime
+        run: npx cypress run --browser electron --config baseUrl=http://127.0.0.1:4516 --spec cypress/e2e/runtime/admin-login-rate-limit-runtime.cy.js
+
+      - name: Post-runtime health
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          pid="$(cat /tmp/admin-login-429-preview.pid)"
+          kill -0 "$pid"
+          status="$(curl -sS -o /tmp/admin-login-429-post.html -w '%{http_code}' http://127.0.0.1:4516/admin/login)"
+          echo "ADMIN_LOGIN_429_PROCESS_ALIVE=true"
+          echo "ADMIN_LOGIN_429_POST_RUNTIME_HTTP=$status"
+          test "$status" = '200'
