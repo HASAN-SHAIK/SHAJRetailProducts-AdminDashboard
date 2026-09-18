@@ -1,0 +1,53 @@
+name: V1 Admin Login Unprocessable Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'cypress/e2e/runtime/admin-login-unprocessable-runtime.cy.js'
+      - '.github/workflows/v1-admin-login-unprocessable-cycle-a.yml'
+      - 'src/**'
+      - 'package*.json'
+  workflow_dispatch:
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact source head
+        if: github.event_name == 'pull_request'
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Locked install
+        run: npm ci --no-audit --no-fund
+      - name: Production build
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:4598/api
+        run: npm run build
+      - name: Start real preview and run focused browser runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4522 --strictPort >/tmp/admin-422-preview.log 2>&1 &
+          pid=$!
+          cleanup() { kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4522/admin/login >/dev/null; then break; fi
+            sleep 1
+          done
+          kill -0 "$pid"
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4522 npx cypress run --browser electron --spec cypress/e2e/runtime/env04-admin-startup.cy.js
+          CYPRESS_ADMIN_BASE_URL=http://127.0.0.1:4522 npx cypress run --browser electron --spec cypress/e2e/runtime/admin-login-unprocessable-runtime.cy.js
+          kill -0 "$pid"
+          status=$(curl -sS -o /tmp/admin-422-after.html -w '%{http_code}' http://127.0.0.1:4522/admin/login)
+          test "$status" = 200
+          echo "ADMIN_LOGIN_422_PREVIEW_PROCESS_ALIVE=true"
+          echo "ADMIN_LOGIN_422_HEALTH_AFTER_STATUS=$status"
+          echo "ADMIN_LOGIN_422_RUNTIME_PASS=true"
