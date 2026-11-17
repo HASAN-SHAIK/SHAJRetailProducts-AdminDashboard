@@ -19,7 +19,8 @@ Cypress.Commands.add('adminLoginAndOpen', (path = '/admin/dashboard') => {
   const adminEmail = Cypress.env('adminEmail');
   const adminPassword = Cypress.env('adminPassword');
 
-  cy.session([adminEmail, adminPassword], () => {
+  // Session id is shown in the runner and failure screenshots: keep the password out of it.
+  cy.session(['admin', adminEmail], () => {
     cy.adminLogin(adminEmail, adminPassword);
   });
 
