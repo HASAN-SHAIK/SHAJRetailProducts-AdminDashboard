@@ -55,13 +55,28 @@ const Sidebar = ({ onLogout }) => {
         }
       }}
     >
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h5" sx={{ color: "#f8fafc" }}>
-          SHAJ NextGen
-        </Typography>
-        <Typography variant="body2" sx={{ color: "#94a3b8", mt: 0.5 }}>
-          Admin Console
-        </Typography>
+      <Box sx={{ p: 3, display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box
+          component="img"
+          src="/assets/branding/app_icon.png"
+          alt="SHAJ"
+          sx={{
+            width: 42,
+            height: 42,
+            borderRadius: 2,
+            boxShadow: "0 4px 14px rgba(56, 189, 248, 0.28)",
+            objectFit: "contain",
+            flexShrink: 0
+          }}
+        />
+        <Box>
+          <Typography variant="h6" sx={{ color: "#f8fafc", lineHeight: 1.2, fontWeight: 700 }}>
+            SHAJ NextGen
+          </Typography>
+          <Typography variant="caption" sx={{ color: "#94a3b8", display: "block", mt: 0.25 }}>
+            Admin Console
+          </Typography>
+        </Box>
       </Box>
       <List sx={{ px: 2 }}>
         {filteredNavItems.map((item) => (
