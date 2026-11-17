@@ -1,11 +1,19 @@
 const adminApiUrl = Cypress.env('adminApiUrl');
 
+// Scoped to the open dialog: the tenant details page also renders read-only
+// fields labelled "Email"/"Name" behind the Register User dialog.
+// MUI/React 18 ids look like ":r1n:", which are invalid in a `#id` selector,
+// so match the id attribute instead.
 const fillByLabel = (label, value) => {
-  cy.contains('label', new RegExp(`^${label}$`, 'i'))
-    .invoke('attr', 'for')
-    .then((fieldId) => {
-      if (!fieldId) throw new Error(`No input id found for label "${label}"`);
-      cy.get(`#${fieldId}`).clear().type(String(value));
+  cy.get('.MuiDialog-root')
+    .last()
+    .within(() => {
+      cy.contains('label', new RegExp(`^${label}\\s*\\*?$`, 'i'))
+        .invoke('attr', 'for')
+        .then((fieldId) => {
+          if (!fieldId) throw new Error(`No input id found for label "${label}"`);
+          cy.get(`[id="${fieldId}"]`).clear().type(String(value));
+        });
     });
 };
 
